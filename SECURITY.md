@@ -5,6 +5,7 @@
 | Version | Supported          |
 | ------- | ------------------ |
 | Beta1   | :white_check_mark: |
+| Beta0.1 | :x:                |
 | Sierra  | :x:                |
 
 ## Reporting a Vulnerability
