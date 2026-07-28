@@ -477,15 +477,29 @@ const BENOS = {
   volume:0.8,
   muted:false,
 };
+/* ---- tiny DOM/utility helpers used throughout the whole app ---- */
+// $  : shorthand for querySelector, optionally scoped to a root element (r)
 const $  = (s,r=document)=>r.querySelector(s);
+// $$ : shorthand for querySelectorAll that returns a real Array (so .map/.forEach/.filter work)
 const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+// el : creates a new DOM element, optionally assigning a class name and inner HTML in one call
 const el = (tag,cls,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;};
+// uid : generates a short, effectively-unique id (crypto random bits + a base36 timestamp) used as file/window/node ids
 const uid = ()=> 'n'+(crypto.getRandomValues(new Uint32Array(2)).join(''))+(performance.now()|0).toString(36);
+// now : current time in ms since epoch, used everywhere timestamps are stored (created/modified dates, throttling, etc.)
 const now = ()=>Date.now();
+// esc : HTML-escapes a value before it's interpolated into innerHTML, preventing XSS from file names/user text
 const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// fmtSize : converts a byte count into a human-readable string (B/KB/MB/GB), used in Files/Storage/Download UIs
 function fmtSize(b){if(b==null)return '--';if(b<1024)return b+' B';if(b<1048576)return (b/1024).toFixed(1)+' KB';if(b<1073741824)return (b/1048576).toFixed(1)+' MB';return (b/1073741824).toFixed(2)+' GB';}
+// fmtDate : converts a timestamp into a localized "Mon D, YYYY HH:MM" string for file/created-modified displays
 function fmtDate(t){if(!t)return '--';const d=new Date(t);return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
+// extOf : returns the lowercase file extension of a name (no dot), or '' if there isn't one
 function extOf(name){const i=name.lastIndexOf('.');return i<0?'':name.slice(i+1).toLowerCase();}
+// getWallpaperEntries : builds the de-duplicated list of wallpapers shown in the wallpaper picker.
+// Merges wallpapers listed remotely (META.manifest.backgrounds, fetched from GitHub at boot) with the
+// wallpapers bundled locally in BENOS.wallpapers (embedded as data URIs), keyed by "dir:name" so the
+// same wallpaper never appears twice even if it exists in both places.
 function getWallpaperEntries(){
   const seen=new Set();
   const result=[];
@@ -496,7 +510,10 @@ function getWallpaperEntries(){
   return result;
 }
 
-/* file kind from extension/mime */
+/* file kind from extension/mime — classifies a file so the Files app/icon system and app-launcher
+   know which generic "kind" (image/audio/video/pdf/zip/txt/generic) a file belongs to, and therefore
+   which icon to draw and which app to open it with. Falls back to the browser-reported MIME type
+   when the extension itself isn't recognized (e.g. a file picked with no extension). */
 function kindFromName(name,mime){
   const e=extOf(name);
   if(['png','jpg','jpeg','gif','webp','bmp','svg','heic','tiff','tif','ico','avif','jfif','pjpeg','pjp','svgz','psd','raw','cr2','nef','orf'].includes(e))return 'image';
@@ -512,7 +529,12 @@ function kindFromName(name,mime){
 /* ===================================================================== */
 /* ERROR HANDLER — recoverable, fatal, app crash                          */
 /* ===================================================================== */
+// errThrottle : timestamp of the last "recoverable error" dialog shown, used to debounce error storms
+// (e.g. the same bug firing on every animation frame) so the user isn't spammed with dialogs.
 let errThrottle=0;
+// benFatal : the "blue screen" path — something broke badly enough that BenOS can't keep running.
+// Hides every top-level UI layer (desktop, menu bar, dock, boot/login screens) and shows the
+// full-screen #fatal panel with the error message, leaving the rest of the page inert.
 function benFatal(msg){
   try{
     $('#desktop').style.display='none';
@@ -524,6 +546,9 @@ function benFatal(msg){
   $('#fatal-msg').textContent = msg||'Unknown fatal error';
   $('#fatal').style.display='flex';
 }
+// benRecoverable : the "soft crash" path for errors that don't need to take down the whole OS.
+// Shows a system-error dialog with the message, plays the alert sound, and posts a notification —
+// then execution simply continues (unlike benFatal, nothing is hidden or torn down).
 function benRecoverable(msg){
   // small system error — show dialog, keep running
   showDialog({
@@ -535,11 +560,17 @@ function benRecoverable(msg){
   try{ playSound('alert'); }catch(e){}
   try{ notify('System Error','Recovered: '+msg,'⚠️'); }catch(e){}
 }
+// isIgnoredRuntimeError : filters out a known-benign race (a stray reference to setupDockMagnify
+// before/after the dock is (re)initialized) so it doesn't trigger a distracting error dialog.
 function isIgnoredRuntimeError(msg){
   const text=String(msg||'');
   return text.includes('setupDockMagnify') && (text.includes('is not defined') || text.includes('is not a function'));
 }
 // global capture for uncaught errors -> recoverable
+// Catches any JS error that escapes a try/catch anywhere in the app (thrown exceptions) and turns it
+// into a recoverable-error dialog instead of silently failing or freezing the UI. Ignored before boot
+// finishes (BENOS.booted) so startup glitches don't interrupt the boot animation, and throttled to at
+// most one dialog every 800ms so a repeating error doesn't flood the screen with dialogs.
 window.addEventListener('error',function(ev){
   if(!BENOS.booted) return;
   const m=ev.error&&ev.error.message?ev.error.message:(ev.message||'Unknown error');
@@ -547,6 +578,8 @@ window.addEventListener('error',function(ev){
   const t=now(); if(t-errThrottle<800){return;} errThrottle=t;
   benRecoverable(m);
 });
+// Same idea as the 'error' listener above, but for rejected Promises that nobody .catch()'d
+// (e.g. an async function that threw). Without this, a failed await would fail silently.
 window.addEventListener('unhandledrejection',function(ev){
   if(!BENOS.booted) return;
   const m=ev.reason&&ev.reason.message?ev.reason.message:String(ev.reason||'Unhandled rejection');
@@ -555,7 +588,11 @@ window.addEventListener('unhandledrejection',function(ev){
   benRecoverable(m);
 });
 
-/* generic dialog builder */
+/* generic dialog builder — the one function nearly every app/system message uses to show a modal.
+   opt: {icon, title, body, code, buttons:[{label, primary, onClick}]}
+   Builds the dialog's markup from those fields, wires each button to close the dialog and (optionally)
+   run its onClick callback, appends it to <body>, and returns the dialog element so callers can further
+   customize it (see promptText below, which injects an <input> into the dialog it gets back). */
 function showDialog(opt){
   const d=el('div','dialog');
   let html='';
@@ -575,7 +612,9 @@ function showDialog(opt){
   return d;
 }
 
-/* small text / password prompt dialog (returns value via callback) */
+/* small text / password prompt dialog (returns value via callback).
+   Reuses showDialog() for the chrome, then inserts a text/password <input> right after the dialog's
+   label paragraph. onOk fires either when the user clicks "OK" or presses Enter in the field. */
 function promptText(title,label,def,isPassword,onOk){
   const inp=el('input'); inp.id='pt-inp'; if(isPassword)inp.type='password'; inp.value=def||'';
   inp.style.cssText='width:100%;padding:7px 10px;border:1px solid #c4c4c8;border-radius:6px;font-size:13px;margin-top:6px;';
@@ -585,7 +624,12 @@ function promptText(title,label,def,isPassword,onOk){
   return d;
 }
 
-/* universal file picker dialog — mode: 'open' | 'save', filter: ['.png','.jpg',...], startFolder: id, onSelect: fn(node|{name,folder}) */
+/* universal file picker dialog — mode: 'open' | 'save', filter: ['.png','.jpg',...], startFolder: id, onSelect: fn(node|{name,folder})
+   A miniature Finder-like window (favorites sidebar + grid of items + back/forward history) used by
+   every app that needs to open or save a file (text editor, paint app, browser download picker, etc).
+   In 'open' mode, onSelect receives the chosen file's FS node; in 'save' mode it receives
+   {name, folder} built from the typed filename and the currently browsed folder, since the target
+   file may not exist yet. onCancel fires if the user dismisses the dialog without choosing anything. */
 function filePicker(opt){
   const d=el('div');
   d.style.cssText='position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center';
@@ -616,7 +660,11 @@ function filePicker(opt){
   d.appendChild(box);
   document.body.appendChild(d);
   const main=$('#fp-main',box), side=$('#fp-side',box), pathEl=$('#fp-path',box);
+  // hist/hpos : browsing history for the back/forward buttons, same pattern as a normal browser —
+  // hist is the visited-folder stack and hpos is the current position within it.
   const hist=[cwd]; let hpos=0;
+  // render : redraws the sidebar favorites + the current folder's contents grid. Called on init and
+  // every time the user navigates (double-click a folder, click back/forward, click a favorite).
   function render(){
     const folder=FS.get(cwd)||FS.get('desktop'); cwd=folder.id;
     pathEl.textContent=FS.pathOf(cwd)==='/'?'Internal Disk':FS.pathOf(cwd);
@@ -664,7 +712,10 @@ function filePicker(opt){
   return d;
 }
 
-/* APP CRASH — close the window, report error (per APPLICATION CRASH HANDLING) */
+/* APP CRASH — close the window, report error (per APPLICATION CRASH HANDLING).
+   Called whenever an app's own code throws in a way it can't recover from itself: closes that app's
+   window (force=true so no "unsaved changes" prompt blocks it), then tells the user what happened via
+   both a dialog and a notification, so a single misbehaving app can't hang or freeze the whole OS. */
 function appCrash(win, errMsg){
   const name = win&&win.appName ? win.appName : 'Application';
   try{ playSound('alert'); }catch(e){}
@@ -777,11 +828,21 @@ const DB = {
   },
 };
 
-/* In-memory mirror of the file system for fast synchronous UI access. */
+/* In-memory mirror of the file system for fast synchronous UI access.
+   Every "file" or "folder" in BenOS is a flat node object {id, parentId, name, type, kind, content, ...}
+   kept in FS.nodes, with the tree structure implied purely by each node's parentId (like a real
+   filesystem's inode table). Reads (get/children/pathOf/search) are synchronous and hit the in-memory
+   Map directly for instant UI updates; writes (save/remove/move/...) mutate the Map AND persist to DB
+   so changes survive a reload. FS.meta is a small parallel key/value store for OS-level settings
+   (wallpaper, dock layout, volume, etc.) that aren't files. */
 const FS = {
   nodes:new Map(),     // id -> node
   meta:new Map(),      // key -> value (system metadata)
 
+  // load : boots the filesystem for the current session — either restores it from DB, or (on first
+  // run, or after a user-triggered reset) seeds a fresh default filesystem. Also runs small one-time
+  // migrations (renaming the disk, dropping stale wallpaper references, ensuring newer system apps
+  // and the Trash folder exist) so upgrades from older BenOS versions don't leave the FS inconsistent.
   async load(){
     const resetPending=getResetFlag();
     if(resetPending){ clearResetFlag(); resetBenOSRuntimeDefaults(); FS.nodes.clear(); FS.meta.clear(); }
@@ -823,11 +884,16 @@ const FS = {
   /* persistence of a single node */
   async save(n){ n.modified=n.modified||now(); FS.nodes.set(n.id,n); await DB.put('fs',n); return n; },
 
+  // get : look up a single node by id (undefined if it doesn't exist).
   get(id){ return FS.nodes.get(id); },
+  // children : all direct children of a folder id, in no particular order (callers sort as needed).
   children(pid){ return [...FS.nodes.values()].filter(n=>n.parentId===pid); },
+  // childByName : find a direct child of a folder by name, case-insensitively (used to detect name clashes).
   childByName(pid,name){ return [...FS.nodes.values()].find(n=>n.parentId===pid && n.name.toLowerCase()===String(name).toLowerCase()); },
 
-  /* unique name within a folder (adds "copy"/number) */
+  /* unique name within a folder (adds "copy"/number).
+     macOS-style collision resolution: "file.txt" -> "file copy.txt" -> "file copy 2.txt" -> ...
+     Only touches the name if something with that exact name already exists in the target folder. */
   uniqueName(pid,name){
     if(!FS.childByName(pid,name))return name;
     const dot=name.lastIndexOf('.'); const base=dot>0?name.slice(0,dot):name; const ext=dot>0?name.slice(dot):'';
@@ -836,6 +902,10 @@ const FS = {
     return cand;
   },
 
+  // createNode : low-level constructor for any FS entry (file, folder, or app shortcut). Fills in
+  // sensible defaults for every field a node needs (id, timestamps, drag position dx/dy, etc.) and
+  // merges caller-supplied fields (opt) plus any extra custom fields (opt.extra) on top, then persists.
+  // Prefer the createFile/createFolder wrappers below for the common cases.
   async createNode(opt){
     const n=Object.assign({
       id:uid(), parentId:opt.parentId, name:opt.name, type:opt.type||'file',
@@ -848,18 +918,26 @@ const FS = {
     return n;
   },
 
+  // createFile : convenience wrapper around createNode for a plain file. Auto-resolves name clashes
+  // via uniqueName, auto-detects the file "kind" from its extension unless one is passed explicitly,
+  // and derives size from content length (this is a text-oriented virtual FS, so size == string length).
   async createFile(pid,name,content,kind){
     name=FS.uniqueName(pid,name);
     const k=kind||kindFromName(name);
     return FS.createNode({parentId:pid,name,type:'file',kind:k,content:content||'',size:(content||'').length});
   },
+  // createFolder : convenience wrapper around createNode for a folder, defaulting the name to
+  // "untitled folder" (Finder-style) when none is given.
   async createFolder(pid,name){
     name=FS.uniqueName(pid,name||'untitled folder');
     return FS.createNode({parentId:pid,name,type:'folder'});
   },
+  // rename : updates a node's display name in place and re-persists it.
   async rename(id,name){
     const n=FS.get(id); if(!n)return; n.name=name; n.modified=now(); await FS.save(n); return n;
   },
+  // remove : permanently deletes a node and, if it's a folder, recursively deletes every descendant
+  // first (both from the in-memory Map and from DB) so nothing is left orphaned pointing at a dead parentId.
   async remove(id){
     const n=FS.get(id); if(!n)return;
     // recurse children
@@ -867,6 +945,9 @@ const FS = {
     FS.nodes.delete(id);
     await DB.del('fs',id);
   },
+  // duplicate : makes a "Name copy" of a node inside toParent (or alongside the original if toParent
+  // is omitted), giving the copy a fresh id/timestamps and resetting its desktop drag position (dx/dy)
+  // so it doesn't render on top of the original. For folders, recursively clones every descendant too.
   async duplicate(id,toParent){
     const n=FS.get(id); if(!n)return;
     const pid = toParent||n.parentId;
@@ -878,6 +959,8 @@ const FS = {
     if(n.type==='folder'){ for(const c of FS.children(id)){ await FS._dupInto(c.id,copy.id); } }
     return copy;
   },
+  // _dupInto : internal helper for duplicate() — clones a single descendant node under an already-created
+  // copy of its parent, keeping the original name (no collision possible since it's a brand-new parent).
   async _dupInto(id,newParent){
     const n=FS.get(id);
     const copy=Object.assign({},n);
@@ -886,6 +969,9 @@ const FS = {
     if(n.type==='folder'){ for(const c of FS.children(id)){ await FS._dupInto(c.id,copy.id); } }
     return copy;
   },
+  // move : reparents a node into a different folder (drag-and-drop in the Files app). Refuses to move
+  // a folder into itself or into one of its own descendants (which would create a cycle and orphan the
+  // subtree from the root), and resolves a name clash in the destination via uniqueName.
   async move(id,toParent){
     const n=FS.get(id); if(!n||toParent===id)return;
     // prevent moving folder into its own descendant
@@ -893,12 +979,15 @@ const FS = {
     n.parentId=toParent; n.name=FS.uniqueName(toParent,n.name); n.dx=null;n.dy=null; n.modified=now();
     await FS.save(n); return n;
   },
-  /* full path of a node */
+  /* full path of a node — walks up the parentId chain from the node to the root, collecting names,
+     then joins them into a "/Documents/Projects/file.txt"-style absolute path string. */
   pathOf(id){
     const parts=[]; let n=FS.get(id);
     while(n && n.id!=='root'){ parts.unshift(n.name); n=FS.get(n.parentId); }
     return '/'+parts.join('/');
   },
+  // search : case-insensitive substring match on file/folder names across the entire filesystem,
+  // used by Spotlight. Excludes the root node itself and caps results at 40 for UI performance.
   search(q){
     q=q.toLowerCase().trim(); if(!q)return [];
     return [...FS.nodes.values()].filter(n=>n.id!=='root'&&n.name.toLowerCase().includes(q)).slice(0,40);
@@ -911,9 +1000,18 @@ const FS = {
     return {files,folders,bytes};
   },
 
-  /* ---- default file system seed ---- */
+  /* ---- default file system seed ----
+     Builds the factory-default filesystem shown to a brand-new user (or after a reset): the standard
+     folders (Desktop/Documents/Downloads/Music/Pictures/Applications/Trash), the system apps as
+     "app" nodes inside Applications, and a few starter files so the desktop isn't empty on first boot.
+     Every node built here still needs FS.save()'d individually further down — seed() only populates
+     the in-memory Map; persistence happens as each mk()'d node is written out below. */
   async seed(){
     FS.nodes.clear(); FS.meta.clear();
+    // mk : local shorthand for building one seed node with sensible defaults, without going through
+    // the async createNode()/save() path (seeding happens in a tight synchronous loop for speed;
+    // nodes are persisted afterward). Uses a fixed id when given (e.g. 'root', 'desktop') so other
+    // code can reference well-known folders by id, or a random uid() for ordinary files.
     const mk=(o)=>{const n=Object.assign({id:o.id||uid(),parentId:o.parentId,name:o.name,type:o.type||'file',kind:o.kind||(o.type==='folder'?'folder':kindFromName(o.name)),mime:o.mime||'',size:o.size||(o.content?o.content.length:0),content:o.content||'',created:now(),modified:now(),systemApp:o.systemApp||null,dx:o.dx??null,dy:o.dy??null},o.extra||{});FS.nodes.set(n.id,n);return n;};
     mk({id:'root',parentId:null,name:'Internal Disk',type:'folder'});
     mk({id:'desktop',parentId:'root',name:'Desktop',type:'folder'});
@@ -946,6 +1044,8 @@ const FS = {
     await FS.setMeta('muted',false);
   }
 };
+// sizeOf : best-effort byte size of a node — prefers an explicitly stored size, otherwise falls back
+// to the length of its text content (this virtual FS stores most files as plain strings).
 function sizeOf(n){
   if(n.size && typeof n.size==='number' && n.size>0) return n.size;
   if(typeof n.content==='string') return n.content.length;
@@ -954,6 +1054,9 @@ function sizeOf(n){
 /* ===================================================================== */
 /* ICON RENDERING — produces the visual glyph for any node                 */
 /* ===================================================================== */
+// SYSTEM_APPS : registry of every built-in application, keyed by the same "systemApp" id stored on
+// its FS node (see seed() above). Drives the dock/desktop icon (color + emoji glyph) and display name
+// wherever an app needs to be shown generically (dock, launcher, alt-tab, "About" dialogs, etc).
 const SYSTEM_APPS = {
   files:   {name:'Files',      color:'#3a86e0', glyph:'🗂'},
   settings:{name:'Settings',   color:'#8e8e93', glyph:'⚙️'},
@@ -965,6 +1068,9 @@ const SYSTEM_APPS = {
   pen:     {name:'BenPen',     color:'#e67e22', glyph:'✏️'},
   benviewer: {name:'BenViewer',  color:'#5ac8fa', glyph:'🖼'},
 };
+// EXT_APPS : maps a file extension to the list of apps that can open it, used to build the
+// "Open With" context-menu submenu in the Files app. Each entry is {label, action(node)} — action is
+// called with the file's FS node when that menu item is chosen.
 const EXT_APPS = {
   txt:   [{label:'Text Editor', action:n=>openTextEditor(n)}],
   html:  [{label:'Text Editor', action:n=>openTextEditor(n)},{label:'BenStudio', action:n=>launchSystemApp('studio',null,null,n)}],
@@ -992,6 +1098,12 @@ const EXT_APPS = {
   ico:   [{label:'BenViewer', action:n=>openImageViewer(n)}],
   avif:  [{label:'BenViewer', action:n=>openImageViewer(n)}],
 };
+// iconHTML : builds the HTML for a single file/folder/app icon at the given pixel size, used by every
+// place a node is drawn as an icon (desktop, Files app, dock, file picker, etc). Priority order:
+// 1) a registered system app (CSS class carries its background/glyph via SYSTEM_APPS-driven styles),
+// 2) a folder,
+// 3) an image file whose content is already a data URI (renders the actual picture as a thumbnail),
+// 4) otherwise a generic glyph looked up by file "kind" from the emoji map.
 function iconHTML(node,size){
   size=size||54;
   const st='width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*0.46)+'px;';
@@ -1009,6 +1121,10 @@ function iconHTML(node,size){
 /* ===================================================================== */
 /* BOOT SYSTEM                                                             */
 /* ===================================================================== */
+// boot : top-level startup sequence, called once when the page loads (see BOOTSTRAP near the end of
+// the file). Shows the boot screen, opens storage and loads/seeds the filesystem, downloads remote
+// metadata (wallpapers/sounds/music listings) while animating the progress bar, then fades the boot
+// screen out and hands off to either the login screen or an automatic sign-in.
 async function boot(){
   const bar=$('#boot-bar');
   const logo=$('#boot-logo'); if(logo){ logo.onerror=()=>{ logo.style.display='none'; }; logo.src=BENOS.logo; }
@@ -1045,12 +1161,25 @@ const META_REPO = 'BenjaminOriginals/BenOS-HTML';
 const META_VER = 'HTML-1.0';
 /* live metadata state: file listings per directory + loaded system sounds */
 const META = { branch:'main', manifest:{backgrounds:[],sounds:[],musics:[]}, sounds:{}, musicReady:false, online:false };
+// getResetFlag/clearResetFlag : a "factory reset" is requested by setting a flag in localStorage
+// (see the Settings app) and reloading the page — boot() checks this flag before touching FS/DB so
+// the reset can wipe stored data cleanly, then clears the flag so the next boot behaves normally.
 function getResetFlag(){ try{return window.localStorage.getItem('benos_reset')==='1';}catch(e){return false;} }
 function clearResetFlag(){ try{ window.localStorage.removeItem('benos_reset'); }catch(e){} }
+// resetBenOSRuntimeDefaults : restores in-memory (non-persisted) runtime state to factory values
+// during a reset — volume/mute and the loaded system-sounds cache.
 function resetBenOSRuntimeDefaults(){ BENOS.volume=0.8; BENOS.muted=false; META.sounds={}; META.musicReady=false; }
+// metaApi : builds the GitHub "contents" API URL used to list files in one metadata directory
+// (backgrounds/Wallpapers/sounds/musics) inside the BenOS assets repo, for the currently-tried branch.
 function metaApi(dir){ return 'https://api.github.com/repos/'+META_REPO+'/contents/'+META_VER+'/'+dir+'?ref='+META.branch; }
+// setBootStatus : hook for showing boot progress text; intentionally a no-op — this build's boot
+// screen is purely visual (logo + bar), but the call sites are kept so status text can be re-enabled easily.
 function setBootStatus(txt){ /* boot is text-free */ }
+// assetKey : builds the DB('assets') cache key for a remote file, namespaced by directory + name so
+// e.g. a wallpaper and a sound can never collide even if they share a filename.
 function assetKey(dir,name){ return 'asset:'+dir+':'+name; }
+// blobToDataURL : converts a fetched Blob (binary response body) into a base64 data: URL string via
+// FileReader, so downloaded assets can be stored/used the same way as the embedded data URIs.
 function blobToDataURL(blob){ return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);}); }
 
 /* list a metadata directory via the GitHub contents API */
@@ -1155,6 +1284,9 @@ function refreshMusicLibraries(){ [...WM.windows.values()].forEach(w=>{ if(w.sys
 /* ===================================================================== */
 let _soundCtx=null;
 let _audioInited=false;
+// initAudioCtx : lazily creates (once) and resumes the shared Web Audio context used for synthesized
+// sounds. Browsers block audio until a real user gesture happens, which is why this is only ever
+// called from the mousedown/keydown listeners below or right before playing a sound.
 function initAudioCtx(){
   if(!_soundCtx){
     _soundCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -1165,6 +1297,9 @@ function initAudioCtx(){
 // init audio on first user interaction (required by Chrome autoplay policy)
 document.addEventListener('mousedown',()=>{ if(!_audioInited)initAudioCtx(); },{once:true});
 document.addEventListener('keydown',()=>{ if(!_audioInited)initAudioCtx(); },{once:true});
+// playSound : plays a named system sound ('alert'|'change'|'notification') using the real downloaded
+// audio file if one was cached in META.sounds, otherwise (or if playback fails/is blocked) falls back
+// to a synthesized beep via synthSound so sound effects still work with no network at all.
 function playSound(name){
   try{
     if(BENOS.muted) return;
@@ -1173,6 +1308,10 @@ function playSound(name){
     synthSound(name);
   }catch(e){ try{ synthSound(name); }catch(_){} }
 }
+// synthSound : generates a short beep entirely with the Web Audio API (oscillator + gain envelope) —
+// no audio files involved. Each named sound has its own waveform/frequency/duration in `map`, with a
+// couple (notification, alert) additionally sweeping pitch mid-note for a more distinct character.
+// This is the guaranteed-to-work fallback so BenOS always has sound effects, online or not.
 function synthSound(name){
   try{
     if(BENOS.muted) return;
@@ -1190,6 +1329,9 @@ function synthSound(name){
   }catch(e){}
 }
 
+// fetchWithTimeout : wraps fetch() so a slow/hanging network request (common when the GitHub API is
+// unreachable) can never stall the boot sequence — resolves to null instead of throwing/hanging if
+// the request doesn't finish within `ms`, aborting the underlying request when AbortController exists.
 function fetchWithTimeout(url,ms){
   return new Promise((resolve)=>{
     let settled=false;
@@ -1214,6 +1356,9 @@ function simulateBoot(bar){
 /* LOGIN SYSTEM                                                            */
 /* ===================================================================== */
 /* user accounts (stored in the file system metadata) */
+// getUsers : returns the list of local accounts, normalizing each entry with default fields so
+// callers never have to null-check name/pass/hint/avatar. If no accounts were ever configured
+// (fresh install), synthesizes a single passwordless default user.
 function getUsers(){
   const u=FS.getMeta('users',null);
   if(!u || !u.length) return [{name:'BenOS User 1', pass:'', hint:'', avatar:'👤'}];
@@ -1224,13 +1369,22 @@ function getUsers(){
     avatar:x.avatar||'👤'
   }));
 }
+// needsLogin : the login screen is only worth showing if there's an actual choice/gate to make —
+// more than one account (so the user must pick one) or at least one account has a password set.
+// A single passwordless account skips straight to the desktop via autoLogin().
 function needsLogin(){
   const u=getUsers();
   return u.length>1 || u.some(x=>x.pass && x.pass.length>0);
 }
+// autoLogin : bypasses the login screen entirely for the common single-user, no-password setup.
 function autoLogin(){ BENOS.user=getUsers()[0].name; startDesktop(); }
 
+// loginUserIdx : index into getUsers() of whichever account is currently selected on the login
+// screen (relevant only in multi-user mode, where the user picks an avatar before entering a password).
 let loginUserIdx=0;
+// showLogin : renders the login screen — applies the desktop wallpaper behind it (falling back to
+// the default/fallback gradient while the real one resolves asynchronously), then builds either a
+// multi-user avatar picker or a single "welcome back, <name>" panel depending on how many accounts exist.
 function showLogin(){
   const users=getUsers();
   loginUserIdx=0;
@@ -1248,6 +1402,10 @@ function showLogin(){
   }
   wireLogin(users);
 }
+// wireLogin : attaches all the interactive behavior for the login panel built by showLogin() —
+// switching the selected account (refreshing avatar/name/password hint text), submitting the
+// password via the arrow button or Enter key (attempt), the shake animation on a wrong password,
+// and the "Forgot password?" link.
 function wireLogin(users){
   const pass=$('#login-pass');
   const refresh=()=>{
@@ -1271,6 +1429,8 @@ function wireLogin(users){
   const recover=$('#login-recover');
   if(recover) recover.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); showPasswordRecovery(users[loginUserIdx]); });
 }
+// showPasswordRecovery : "Forgot password?" handler — since BenOS has no real backend, "recovery" is
+// just showing the self-authored hint the user set for that account (or explaining why none is available).
 function showPasswordRecovery(cur){
   if(!cur.pass){
     showDialog({ icon:'🔐', title:'Password Recovery', body:'This account is not password protected, so no recovery hint is available.', buttons:[{label:'Close',primary:true}] });
@@ -1282,6 +1442,7 @@ function showPasswordRecovery(cur){
     showDialog({ icon:'🔐', title:'Password Recovery', body:'No recovery hint has been set for this account yet. Open Settings → Users to add one.', buttons:[{label:'Close',primary:true}] });
   }
 }
+// doLoginSuccess : fades the login screen out, then starts the desktop once the transition finishes.
 function doLoginSuccess(){
   const lg=$('#login');
   lg.style.opacity='0';
@@ -1298,12 +1459,20 @@ const WIN_ICONS = {
   restore:'<svg width="11" height="11" viewBox="0 0 11 11"><rect x="1.2" y="3" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M3.6 3V1.3h6.2v6.2H8" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>',
   close:  '<svg width="11" height="11" viewBox="0 0 11 11"><path d="M1.5 1.5l8 8M9.5 1.5l-8 8" stroke="currentColor" stroke-width="1.2"/></svg>',
 };
+// WM : the Window Manager — owns every open app window's DOM element and state (position, size,
+// minimized/maximized, z-order, focus). Every app in BenOS runs inside a window created by WM.create()
+// and rendered into #window-layer; apps then get a `win.body` element to fill with their own UI and
+// never touch window chrome (titlebar, resize handles, focus/z-index) directly — WM does all of that.
 const WM = {
-  windows:new Map(),
-  zTop:100,
-  focused:null,
-  cascade:0,
+  windows:new Map(),   // id -> window record (see create() for the shape)
+  zTop:100,             // highest z-index handed out so far; focusing a window always goes above it
+  focused:null,          // the window record currently focused, or null if none
+  cascade:0,             // increments per created window so new windows cascade-offset instead of stacking exactly on top of each other
 
+  // create : builds a new window — DOM (titlebar with min/max/close buttons + resize handles on all
+  // 8 edges/corners + an empty win-body for the app's content), a window record with helper methods
+  // (guard/setTitle), wires dragging/resizing/focus/context-menu, then focuses and fades it in.
+  // opt: {title, width, height, x, y, fileId, systemApp, onClose}
   create(opt){
     const id=uid();
     const layer=$('#window-layer');
@@ -1334,7 +1503,12 @@ const WM = {
       body:$('.win-body',w), titleEl:$('.title',w),
       minimized:false, maximized:false, prevRect:null, alwaysTop:false,
       onClose:opt.onClose||null,
+      // guard : wraps an event handler so any exception it throws is caught and routed through
+      // appCrash() instead of bubbling up and potentially breaking the whole page. Apps should wrap
+      // their own click/input handlers in win.guard(...) for crash isolation.
       guard(fn){ return function(){ try{ return fn.apply(this,arguments); }catch(e){ appCrash(win,e.message||e); } }; },
+      // setTitle : updates both the in-memory app name and the visible titlebar text, refreshing the
+      // menu bar's app name too if this window is the currently focused one.
       setTitle(t){ win.appName=t; win.titleEl.textContent=t; if(WM.focused===win)refreshMenuApp(); },
     };
     WM.windows.set(id,win);
@@ -1358,6 +1532,9 @@ const WM = {
     return win;
   },
 
+  // focus : brings a window to the front (raises its z-index above every other window, unless it's
+  // pinned alwaysTop) and marks the previously focused window as blurred (dims its titlebar via CSS).
+  // Also keeps the menu bar's "active app" name and the dock's running-indicator dots in sync.
   focus(win){
     if(WM.focused===win){return;}
     if(WM.focused){ WM.focused.el.classList.add('blur'); }
@@ -1368,6 +1545,10 @@ const WM = {
     updateDockRunning();
   },
 
+  // _dragify : lets the user drag a window by its titlebar. Skips dragging when a caption button was
+  // clicked or the window is maximized, tracks the starting mouse position and window offset, then
+  // moves the window by the mouse delta on every mousemove until mouseup (classic drag pattern).
+  // Clamps the vertical position so a window can never be dragged above the menu bar (y stays >= 0).
   _dragify(win){
     const tb=$('.titlebar',win.el);
     tb.addEventListener('mousedown',e=>{
@@ -1386,6 +1567,12 @@ const WM = {
     });
   },
 
+  // _resizify : wires up the 8 invisible resize handles (n/s/e/w edges + 4 corners) generated in
+  // create(). `dir` (parsed from the handle's class name, e.g. "se") tells which edges move: dragging
+  // the east/south edges grows the window from its current top-left corner; dragging north/west also
+  // has to shift the window's left/top position so the opposite edge stays put, which is what the
+  // "left = left+(width-newWidth)" / "top = top+(height-newHeight)" adjustments below do. A minimum
+  // width/height (minW/minH) stops the window from being shrunk into nothing.
   _resizify(win){
     $$('.resz',win.el).forEach(h=>{
       h.addEventListener('mousedown',e=>{
@@ -1414,17 +1601,26 @@ const WM = {
     });
   },
 
+  // minimize : plays the shrink-away CSS animation ('min' class), then actually hides the element
+  // (display:none) once the animation has had time to finish, so it doesn't take up layout space or
+  // intercept clicks while minimized. If the minimized window was focused, focus moves to the next
+  // topmost visible window.
   minimize(win){
     win.minimized=true; win.el.classList.add('min');
     setTimeout(()=>{ if(win.minimized)win.el.style.display='none'; },180);
     if(WM.focused===win){ WM.focused=null; WM._focusNext(); }
     updateDockRunning();
   },
+  // restore : reverses minimize() — shows the element again, removes the 'min' class a tick later so
+  // the un-shrink animation plays, and focuses the window.
   restore(win){
     win.minimized=false; win.el.style.display='flex';
     setTimeout(()=>win.el.classList.remove('min'),15);
     WM.focus(win);
   },
+  // toggleMax : switches a window between its normal size/position and fullscreen. Before maximizing,
+  // saves the current rect (prevRect) so restoring can put it back exactly where it was. While
+  // maximized, also hides the dock and menu bar for an immersive fullscreen feel (macOS-style).
   toggleMax(win){
     const maxBtn=$('.wbtn.max',win.el);
     win.el.classList.add('win-anim');
@@ -1446,6 +1642,9 @@ const WM = {
       $('#menubar').classList.add('mbar-hide');
     }
   },
+  // close : tears a window down — runs its onClose callback first (unless silent=true, used by
+  // appCrash() so a crashing app doesn't get a chance to block its own closure), plays the fade-out
+  // animation, removes the element from the DOM after it finishes, and forgets the window entirely.
   close(win,silent){
     if(!WM.windows.has(win.id))return;
     if(win.onClose && !silent){ try{win.onClose();}catch(e){} }
@@ -1455,16 +1654,26 @@ const WM = {
     if(WM.focused===win){ WM.focused=null; WM._focusNext(); }
     refreshMenuApp(); updateDockRunning();
   },
+  // _focusNext : after the focused window closes/minimizes, picks whichever remaining non-minimized
+  // window has the highest z-index (i.e. was visually on top) and focuses it — mimics normal OS
+  // alt-tab-adjacent behavior where focus falls to whatever's now "underneath".
   _focusNext(){
     let top=null,z=-1;
     WM.windows.forEach(w=>{ if(!w.minimized){ const wz=parseInt(w.el.style.zIndex||0); if(wz>z){z=wz;top=w;} } });
     if(top)WM.focus(top); else { WM.focused=null; refreshMenuApp(); }
   },
+  // byApp : all currently-open windows belonging to a given system app id — used for single-instance
+  // apps (e.g. Settings) that should focus their existing window instead of opening a second one.
   byApp(systemApp){ return [...WM.windows.values()].filter(w=>w.systemApp===systemApp); },
 };
 /* ===================================================================== */
 /* DESKTOP — startup, wallpaper, menu bar, clock                          */
 /* ===================================================================== */
+// startDesktop : the transition from login/boot into the actual usable OS. Reveals the desktop/menu
+// bar/dock, restores saved volume/mute state, and builds every top-level UI piece (menu bar, desktop
+// icons, dock, clock) before wiring up desktop-level event listeners. Also surfaces one-time
+// notifications about storage mode (if IndexedDB isn't available) and kicks off the background music
+// library download after a short delay so it doesn't compete with the startup animation.
 function startDesktop(){
   applyWallpaper();
   $('#desktop').style.display='block';
@@ -1504,6 +1713,9 @@ async function resolveWallpaper(wp){
   }
   return await defaultWallpaperURL();
 }
+// defaultWallpaperURL : picks the wallpaper shown when the user hasn't set a custom one — tries a
+// short preference list of known-good local wallpapers first (so it works fully offline), then a
+// remotely-fetched background, and finally falls back to a plain CSS gradient if nothing is available.
 async function defaultWallpaperURL(){
   const preferred=[
     {dir:'Wallpapers',name:'Ocean Sky.svg'},
@@ -1518,6 +1730,9 @@ async function defaultWallpaperURL(){
   }
   return BENOS.defaultWallpaper || BENOS.fallbackWallpaper;
 }
+// applyWallpaper : re-reads the user's saved wallpaper preference, resolves it to an actual usable
+// CSS value/URL, and applies it to both the desktop and the (currently hidden) login screen so
+// they're always in sync with whatever the user last chose.
 async function applyWallpaper(){
   const desk=$('#desktop');
   const lg=$('#login');
@@ -1527,9 +1742,15 @@ async function applyWallpaper(){
 }
 
 /* ---- menu bar ---- */
+// buildMenuBar : one-time setup for the top menu bar — currently just an alias for refreshMenuApp
+// since the menu bar's left side needs to be (re)built the same way both at startup and every time
+// the focused app changes.
 function buildMenuBar(){
   refreshMenuApp();
 }
+// refreshMenuApp : rebuilds the left side of the menu bar (Apple logo, focused app's name, and the
+// standard File/Edit/View/Window/Help menu items) to reflect whichever window is currently focused.
+// Falls back to "Finder" as the app name when no window is focused (i.e. showing the desktop).
 function refreshMenuApp(){
   const left=$('#mb-left');
   const appName = WM.focused? WM.focused.appName : 'Finder';
@@ -1546,6 +1767,8 @@ function refreshMenuApp(){
     left.appendChild(it);
   });
 }
+// appleMenu : the dropdown for the Apple-logo menu item — system-wide actions (About, Preferences,
+// Sleep/Restart/Shut Down, Lock/Log Out) that aren't tied to whichever app is currently focused.
 function appleMenu(x,y){
   showCtx(x,y,[
     {label:'About This BenOS',action:openAbout},
@@ -1560,6 +1783,9 @@ function appleMenu(x,y){
     {label:'Log Out '+BENOS.user+'…',action:()=>{ confirmAction('Log out?',logOut); }},
   ]);
 }
+// appNameMenu : the dropdown for the bold app-name menu item — per-app actions (About/Hide/Close/Quit).
+// Since apps here are just windows (there's no separate "process" to quit), Quit and Close both simply
+// close the focused window.
 function appNameMenu(name,x,y){
   const items=[{label:'About '+name,action:openAbout}];
   if(WM.focused){
@@ -1570,6 +1796,10 @@ function appNameMenu(name,x,y){
   items.push({sep:true},{label:'Quit '+name,action:()=>{ if(WM.focused)WM.close(WM.focused); }});
   showCtx(x,y,items);
 }
+// genericTopMenu : the dropdown content for the generic File/Edit/View/Window/Help menu items.
+// Most entries here are OS-level stand-ins (Edit's Undo/Redo/Cut/Copy/Paste are permanently disabled
+// placeholders since there's no real shared clipboard/undo stack); Window builds a live checklist of
+// every open window so the user can switch to or restore any of them from the menu bar.
 function genericTopMenu(m,x,y){
   const sets={
     File:[{label:'New Finder Window',action:()=>launchSystemApp('files')},{label:'New Folder',action:()=>{quickNewFolder('desktop');}},{sep:true},{label:'Close Window',action:()=>WM.focused&&WM.close(WM.focused),disabled:!WM.focused}],
@@ -1582,6 +1812,8 @@ function genericTopMenu(m,x,y){
 }
 
 /* ---- clock & date ---- */
+// startClock : renders the "Day M/D  H:MM" text in the menu bar immediately, then keeps it updated
+// once a second — a plain setInterval is fine here since the format only needs minute-level precision.
 function startClock(){
   const upd=()=>{
     const d=new Date();
@@ -1595,7 +1827,14 @@ function startClock(){
 /* ===================================================================== */
 /* DESKTOP ICONS — render, position persist, drag, select                 */
 /* ===================================================================== */
+// deskSel : ids of the currently-selected desktop icons (a Set so multi-select via shift/ctrl-click
+// is just "add to the set" instead of juggling an array).
 let deskSel=new Set();
+// renderDesktopIcons : redraws every icon on the desktop from the Desktop folder's children.
+// Icons that have never been positioned (dx/dy are null — e.g. just imported) get auto-placed in a
+// top-to-bottom column starting from the right edge of the screen, wrapping to a new column further
+// left once a column fills up (mimics how a real desktop lays out new icons), and that assigned
+// position is persisted so it's remembered next time.
 function renderDesktopIcons(){
   const layer=$('#icon-layer'); layer.innerHTML='';
   const items=FS.children('desktop');
@@ -1605,6 +1844,9 @@ function renderDesktopIcons(){
     layer.appendChild(makeDesktopIcon(n));
   });
 }
+// makeDesktopIcon : builds one absolutely-positioned desktop icon element (icon glyph + name label)
+// and wires its interactions: mousedown starts a drag, double-click opens it, single click selects it
+// (with shift/cmd/ctrl for multi-select), right-click selects it and opens its context menu.
 function makeDesktopIcon(n){
   const d=el('div','desk-icon');
   d.style.left=n.dx+'px'; d.style.top=n.dy+'px';
@@ -1616,11 +1858,18 @@ function makeDesktopIcon(n){
   d.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();selectDesktop(n.id,false);nodeContextMenu(n,e.clientX,e.clientY,'desktop');});
   return d;
 }
+// selectDesktop : marks an icon as selected (visually via the 'sel' class). When add=false (a plain
+// click), first clears any existing selection so it behaves like a normal single-select; add=true
+// (shift/ctrl/cmd-click) preserves the existing selection and adds this icon to it.
 function selectDesktop(id,add){
   if(!add){ deskSel.clear(); $$('.desk-icon').forEach(x=>x.classList.remove('sel')); }
   deskSel.add(id);
   const elx=$('.desk-icon[data-id="'+id+'"]'); if(elx)elx.classList.add('sel');
 }
+// deskIconDrag : free-form drag-to-reposition for a desktop icon. Tracks the mouse delta from
+// mousedown, moves the icon element live, and only commits (moved=true) once the pointer has traveled
+// far enough to count as an intentional drag rather than a click — see the rest of this function below
+// for the threshold check and the final position save.
 function deskIconDrag(e,d,n){
   selectDesktop(n.id,e.shiftKey);
   const sx=e.clientX,sy=e.clientY; const ox=n.dx,oy=n.dy; let moved=false; let lx=e.clientX,ly=e.clientY;
@@ -1644,6 +1893,8 @@ function deskIconDrag(e,d,n){
   };
   document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
 }
+// sortDesktopIcons : "Clean Up"-style action — re-lays-out every desktop icon into the same
+// right-to-left column grid used for newly-created icons, sorted folders-first then alphabetically.
 function sortDesktopIcons(){
   const items=FS.children('desktop').sort((a,b)=>a.type===b.type?a.name.localeCompare(b.name):(a.type==='folder'?-1:1));
   let gx=window.innerWidth-110, gy=14;
@@ -1654,6 +1905,9 @@ function sortDesktopIcons(){
 /* ===================================================================== */
 /* DOCK                                                                    */
 /* ===================================================================== */
+// buildDock : rebuilds the dock from scratch — pinned items (from FS meta 'dock', an ordered list of
+// node ids) on the left, then a visual separator, then the always-present Downloads folder and Trash
+// on the right. Also wires drag-and-drop so an app dragged from the Files app onto the dock gets pinned.
 function buildDock(){
   const dock=$('#dock'); dock.innerHTML='';
   const ids=FS.getMeta('dock',[]);
@@ -1679,6 +1933,9 @@ function buildDock(){
   };
   updateDockRunning();
 }
+// makeTrashItem : builds the special Trash dock icon — shows a filled/empty state and item count in
+// its tooltip, opens the Trash folder in Files on click, offers "Empty Trash" on right-click, and
+// accepts drag-and-drop from the Files app to delete whatever's dropped on it.
 function makeTrashItem(size){
   const it=el('div','dock-item'); it.dataset.id='trash';
   const full=FS.children('trash').length>0;
@@ -1698,6 +1955,8 @@ function makeTrashItem(size){
   it.addEventListener('drop',e=>{ e.preventDefault(); e.stopPropagation(); it.classList.remove('drop-hot'); const id=e.dataTransfer.getData('benos/id'); if(id){ const n=FS.get(id); if(n)deleteNode(n); } });
   return it;
 }
+// makeDockItem : builds a normal (non-Trash) dock icon for a pinned app/file — clicking it bounces
+// the icon and opens the node; right-click shows its dock-specific context menu (e.g. "Remove from Dock").
 function makeDockItem(n,size){
   const it=el('div','dock-item');
   it.dataset.id=n.id;
@@ -1708,18 +1967,25 @@ function makeDockItem(n,size){
   it.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();dockContextMenu(n,e.clientX,e.clientY);});
   return it;
 }
+// bounceDock : the little "spring" animation a dock icon plays when launched, done with the Web
+// Animations API rather than a CSS class so it can be triggered repeatedly without state juggling.
 function bounceDock(it){
   it.animate([{transform:'translateY(0)'},{transform:'translateY(-22px)'},{transform:'translateY(0)'}],{duration:520,easing:'ease-out'});
 }
 
+// updateDockRunning : adds/removes the "running" indicator dot under each dock icon by checking which
+// pinned ids currently have an open window (matched via each window's fileId).
 function updateDockRunning(){
   const running=new Set([...WM.windows.values()].map(w=>w.fileId).filter(Boolean));
   $$('.dock-item').forEach(it=>{ it.classList.toggle('running', running.has(it.dataset.id)); });
 }
+// dockAdd : pins a node to the dock (appends its id to the persisted dock list) unless it's already
+// pinned, then rebuilds the dock and confirms with a notification.
 async function dockAdd(id){
   const ids=FS.getMeta('dock',[]); if(ids.includes(id)){return;}
   ids.push(id); await FS.setMeta('dock',ids); buildDock(); notify('Added to Dock',(FS.get(id)||{}).name||'','📌');
 }
+// dockRemove : unpins a node from the dock (removes its id from the persisted dock list) and rebuilds.
 async function dockRemove(id){
   let ids=FS.getMeta('dock',[]); ids=ids.filter(x=>x!==id); await FS.setMeta('dock',ids); buildDock();
 }
@@ -1727,7 +1993,14 @@ async function dockRemove(id){
 /* ===================================================================== */
 /* NOTIFICATIONS                                                           */
 /* ===================================================================== */
+// NOTES : in-memory history of notifications shown this session (newest first), backing the
+// Notification Center list. Capped at 50 entries — not persisted across reloads.
 const NOTES=[];
+// notify : the single entry point for showing a system notification. Does two things at once:
+// pops up a transient toast in the top-right (auto-dismisses after ~4.2s) AND records it into NOTES
+// so it's still visible later in the Notification Center. Also plays the notification sound, unless
+// this is a warning/crash icon (those already play their own more attention-grabbing 'alert' sound
+// from the caller) or the OS hasn't finished booting yet.
 function notify(title,body,icon){
   const t=el('div','toast');
   t.innerHTML='<div class="tic" style="background:rgba(0,0,0,.06)">'+(icon||'🔔')+'</div><div class="tx"><div class="tt">'+esc(title)+'</div><div class="tb">'+esc(body||'')+'</div></div>';
@@ -1739,23 +2012,34 @@ function notify(title,body,icon){
   renderNotifCenter();
   if(BENOS.booted && icon!=='⚠️' && icon!=='💥') playSound('notification');
 }
+// renderNotifCenter : redraws the full notification history list inside the Notification Center panel.
 function renderNotifCenter(){
   const list=$('#notif-list');
   if(NOTES.length===0){ list.innerHTML='<div class="nc-empty">No Notifications</div>'; return; }
   list.innerHTML=NOTES.map(n=>'<div class="nc-item"><div class="tt">'+(n.icon)+' '+esc(n.title)+'</div><div class="tb">'+esc(n.body||'')+'</div><div class="tm">'+new Date(n.time).toLocaleTimeString('en-US')+'</div></div>').join('');
 }
+// toggleNotifCenter : shows/hides the Notification Center slide-out panel (triggered by clicking the
+// bell icon in the menu bar).
 function toggleNotifCenter(){ $('#notif-center').classList.toggle('open'); }
 
 /* ===================================================================== */
 /* SPOTLIGHT SEARCH                                                        */
 /* ===================================================================== */
+// spotSel/spotItems : index of the currently-highlighted result (for arrow-key navigation) and the
+// current list of matching FS nodes, shared between spotSearch (which populates them) and the
+// keyboard handler (which moves spotSel and opens spotItems[spotSel] on Enter).
 let spotSel=0, spotItems=[];
+// openSpotlight : shows the Spotlight overlay and resets it to an empty search state, focusing the
+// input a beat later (setTimeout) so the show transition/CSS display change has taken effect first.
 function openSpotlight(){
   $('#spotlight').style.display='flex';
   const i=$('#spot-input'); i.value=''; $('#spot-results').innerHTML=''; spotItems=[];spotSel=0;
   setTimeout(()=>i.focus(),30);
 }
 function closeSpotlight(){ $('#spotlight').style.display='none'; }
+// spotSearch : runs on every keystroke in the Spotlight input — delegates the actual matching to
+// FS.search(), then renders each result as a row (icon + name + full path) with the first result
+// pre-selected, and wires a click on any row to open that file and close Spotlight.
 function spotSearch(q){
   const res=$('#spot-results');
   spotItems = FS.search(q);
@@ -1765,6 +2049,8 @@ function spotSearch(q){
   res.innerHTML=spotItems.map((n,i)=>'<div class="spot-row'+(i===0?' sel':'')+'" data-i="'+i+'">'+iconHTML(n,30)+'<div><div>'+esc(n.name)+'</div></div><div class="meta">'+FS.pathOf(n.id)+'</div></div>').join('');
   $$('.spot-row',res).forEach(r=>{ r.onclick=()=>{ const n=spotItems[+r.dataset.i]; closeSpotlight(); openNode(n); }; });
 }
+// spotMove : moves the highlighted result up/down (d = -1 or +1) in response to arrow keys, wrapping
+// around at either end of the results list.
 function spotMove(d){
   if(!spotItems.length)return;
   spotSel=(spotSel+d+spotItems.length)%spotItems.length;
@@ -1773,6 +2059,9 @@ function spotMove(d){
 /* ===================================================================== */
 /* CONTEXT MENU ENGINE — generic, supports submenus & separators          */
 /* ===================================================================== */
+// showCtx : the single entry point every right-click menu in BenOS goes through. Builds the menu tree
+// from a plain data structure (see buildCtxMenu), positions it at (x,y), then nudges it back inside
+// the viewport if it would otherwise overflow off the right or bottom edge of the screen.
 function showCtx(x,y,items){
   const root=$('#ctx-root'); root.innerHTML=''; root.style.display='block';
   const menu=buildCtxMenu(items);
@@ -1783,6 +2072,10 @@ function showCtx(x,y,items){
   if(y+r.height>window.innerHeight)y=window.innerHeight-r.height-6;
   menu.style.left=Math.max(2,x)+'px'; menu.style.top=Math.max(24,y)+'px';
 }
+// buildCtxMenu : recursively builds a <div class="ctx-menu"> from a plain-object menu description.
+// items: array of {label, action, disabled, sep, check, submenu}. `sep` renders a divider line;
+// `submenu` (itself a nested items array) opens a child menu on hover, closing any previously-open
+// sibling submenu first and flipping to the left side of the screen if there's no room on the right.
 function buildCtxMenu(items){
   const menu=el('div','ctx-menu');
   items.forEach(it=>{
@@ -1810,9 +2103,16 @@ function buildCtxMenu(items){
   });
   return menu;
 }
+// hideCtx : dismisses whatever context menu (and any open submenus) is currently showing.
 function hideCtx(){ $('#ctx-root').style.display='none'; $('#ctx-root').innerHTML=''; }
 
-/* ---- per-object context menus (DESKTOP, FILE, FOLDER, APP, DOCK, WINDOW) ---- */
+/* ---- per-object context menus (DESKTOP, FILE, FOLDER, APP, DOCK, WINDOW) ----
+   Each function below returns (or directly shows) the right set of menu items for one category of
+   right-clicked thing, since a folder needs different actions than a file, an app, or a Trash item. */
+// nodeContextMenu : the router — picks which per-type menu builder applies to node `n` (special-cased
+// Trash contents first, since those get Put Back/Delete Immediately instead of the normal actions)
+// and shows it at (x,y). `origin` isn't currently branched on here but is passed through by callers
+// to indicate whether the click came from the desktop or a Files window.
 function nodeContextMenu(n,x,y,origin){
   let items;
   if(n.parentId==='trash'){
@@ -1893,6 +2193,8 @@ function appObjectMenu(n){
     {label:'Get Info',action:()=>showProperties(n)},
   ];
 }
+// dockContextMenu : right-click menu for a pinned dock icon — offers "Show All Windows" only when
+// the app actually has open windows for this node, since it'd otherwise be a dead action.
 function dockContextMenu(n,x,y){
   const open=WM.byApp(n.systemApp).length>0 || [...WM.windows.values()].some(w=>w.fileId===n.id);
   showCtx(x,y,[
@@ -1905,6 +2207,8 @@ function dockContextMenu(n,x,y){
     {label:'Get Info',action:()=>showProperties(n)},
   ]);
 }
+// windowMenu : right-click menu on a window's titlebar — standard minimize/maximize/close plus a
+// toggleable "Always on Top" that pins the window's z-index above the normal stacking order.
 function windowMenu(win,x,y){
   showCtx(x,y,[
     {label:'Minimize',action:()=>WM.minimize(win)},
@@ -1914,6 +2218,7 @@ function windowMenu(win,x,y){
     {label:(win.alwaysTop?'✓ ':'')+'Always on Top',action:()=>{win.alwaysTop=!win.alwaysTop;win.el.style.zIndex=win.alwaysTop?5000:++WM.zTop;}},
   ]);
 }
+// desktopMenu : right-click menu on empty desktop space (new file/folder, paste, refresh, sort, wallpaper).
 function desktopMenu(x,y){
   showCtx(x,y,[
     {label:'New Folder',action:()=>quickNewFolder('desktop')},
@@ -1937,7 +2242,12 @@ function moveTargets(n){
 /* ===================================================================== */
 /* CLIPBOARD + shared file operations                                     */
 /* ===================================================================== */
+// Clip : the system-wide copy/cut clipboard — a single {mode:'copy'|'cut', ids:[...]} shared by
+// every Copy/Cut/Paste menu item across the desktop and all Files windows.
 let Clip={mode:null,ids:[]};
+// pasteInto : applies the current clipboard into folder `pid` — a cut moves the original nodes there,
+// a copy duplicates them instead (leaving the originals in place). A cut clipboard is consumed after
+// one paste (cleared), matching normal OS cut/paste semantics; a copy clipboard can be pasted repeatedly.
 async function pasteInto(pid){
   if(!Clip.ids.length)return;
   for(const id of Clip.ids){
@@ -1947,6 +2257,9 @@ async function pasteInto(pid){
   if(Clip.mode==='cut')Clip={mode:null,ids:[]};
   refreshAfterFS(pid);
 }
+// quickNewFolder/quickNewFile : create-and-immediately-rename helpers used by "New Folder"/"New File"
+// menu items — the freshly created node is created with a placeholder name, the relevant view is
+// refreshed so it's visible, then a rename prompt opens right away so the user can name it.
 async function quickNewFolder(pid){ const f=await FS.createFolder(pid,'untitled folder'); refreshAfterFS(pid); promptRename(f); }
 async function quickNewFile(pid){ const f=await FS.createFile(pid,'untitled.txt',''); refreshAfterFS(pid); promptRename(f); }
 function promptRename(n){
@@ -1988,16 +2301,24 @@ function emptyTrash(){
     {label:'Empty Trash',primary:true,onClick:async()=>{ for(const c of items){ await FS.remove(c.id); } refreshAfterFS('trash'); notify('Trash emptied',items.length+' item'+(items.length>1?'s':'')+' removed','🗑'); }}
   ]});
 }
+// createShortcut : makes a simplistic "alias" — really just a full duplicate file/app sharing the
+// same content/kind/systemApp, named "<name> alias", rather than a true symlink-style reference.
 async function createShortcut(n){
   const s=await FS.createFile(n.parentId, n.name.replace(/(\.\w+)?$/,' alias$1'), '', n.kind);
   s.systemApp=n.systemApp; s.content=n.content; s.kind=n.kind; s.type=n.type; await FS.save(s);
   refreshAfterFS(n.parentId); notify('Shortcut created',s.name,'🔗');
 }
+// compressNode : a cosmetic "Compress" action — since there's no real archiver, it just creates a
+// placeholder .zip file sized at ~60% of the original (simulating typical compression) rather than
+// containing actual compressed data.
 async function compressNode(n){
   const zip=await FS.createFile(n.parentId, n.name+'.zip','[Compressed archive of '+n.name+']','zip');
   zip.size=Math.max(1024,Math.round(sizeOf(n)*0.6)); await FS.save(zip);
   refreshAfterFS(n.parentId); notify('Compressed',n.name+' → '+zip.name,'🗜');
 }
+// showProperties : "Get Info" — reuses showDialog for the icon/title chrome, then strips out its
+// default body paragraph and injects a custom key/value table (Kind/Size/Where/Created/Modified)
+// built directly from the node's fields.
 function showProperties(n){
   const childCount = n.type==='folder'?FS.children(n.id).length:null;
   showDialog({icon:iconHTML(n,46).replace(/class="ico[^"]*"/,'class="ico"'),title:n.name,body:''});
@@ -2015,6 +2336,10 @@ function showProperties(n){
   tbl.innerHTML=rows.map(r=>'<div style="display:flex;justify-content:space-between;gap:14px;padding:3px 0;border-bottom:1px solid #e4e4e6"><b style="color:#666">'+r[0]+'</b><span style="text-align:right">'+esc(r[1])+'</span></div>').join('');
   $('h3',d).after(tbl);
 }
+// refreshAfterFS : the standard "something in the filesystem changed" cleanup call — re-renders the
+// desktop if the change affects it, tells every open Files window to refresh its own view (each window
+// decides for itself whether the change is relevant, via its own `refresh` method), and rebuilds the
+// dock in case a pinned item was renamed/removed.
 function refreshAfterFS(pid){
   if(pid==='desktop'||pid==null) renderDesktopIcons();
   // refresh any open Files windows showing this folder
@@ -2025,6 +2350,11 @@ function refreshAfterFS(pid){
 /* ===================================================================== */
 /* APPLICATION ENGINE — open nodes & launch apps                          */
 /* ===================================================================== */
+// openNode : the universal "double-click this" handler — routes a node to whichever app/viewer makes
+// sense for it: a system app node relaunches that app, a folder opens in Files, an .html/.htm file (or
+// anything explicitly typed as an app) runs as a sandboxed mini-app, images/audio/video get their
+// dedicated viewers, and everything else (including PDFs, which have no real renderer here) falls
+// back to the plain text editor.
 function openNode(n){
   if(!n)return;
   if(n.systemApp){ launchSystemApp(n.systemApp, null, n.id); return; }
@@ -2038,7 +2368,15 @@ function openNode(n){
   openTextEditor(n);
 }
 
-/* launch a built-in system application (native, privileged FS access) */
+/* launch a built-in system application (native, privileged FS access).
+   key: SYSTEM_APPS id (e.g. 'files','settings','music'...), arg: app-specific open target
+   (e.g. a folder id for Files), fileId: window's tracked file/app id (defaults to 'app-<key>' so the
+   dock's "running" indicator can find it), extra: app-specific payload (e.g. a track to open in Music).
+   Most apps are single-instance: if a window for this app already exists, it's focused/restored
+   instead of opening a duplicate (Files is the deliberate exception — you can have multiple Finder
+   windows open on different folders at once, like a real OS). Sizes are hand-tuned per app. Building
+   the app's UI is wrapped in try/catch so a bug in one app's setup can't take down the whole OS —
+   it becomes a normal appCrash() instead. */
 function launchSystemApp(key, arg, fileId, extra){
   const meta=SYSTEM_APPS[key]; if(!meta)return;
   fileId = fileId || ('app-'+key);
@@ -2063,7 +2401,13 @@ function launchSystemApp(key, arg, fileId, extra){
   return win;
 }
 
-/* launch a user HTML file as a sandboxed application with crash bridge */
+/* launch a user HTML file as a sandboxed application with crash bridge.
+   User-authored .html files (e.g. built with BenStudio) run inside a sandboxed <iframe> so they can't
+   reach into or break the host OS page, but a crash inside that iframe still needs to surface as a
+   normal BenOS "app crashed" dialog. The `bridge` script is prepended to the iframe's srcdoc — it
+   catches errors/rejections inside the sandboxed page and forwards them to the parent via
+   postMessage(), which the 'message' listener below turns into an appCrash() call. If the file's
+   content isn't already a full document (no <html> tag), it's wrapped in a minimal one first. */
 function launchHTMLApp(n){
   const win=WM.create({title:n.name.replace(/\.html?$/,''), fileId:n.id, width:720,height:480});
   const bridge =
@@ -2084,6 +2428,9 @@ function launchHTMLApp(n){
 }
 
 /* simple built-in viewers/editors */
+// openTextEditor : minimal TextEdit-style app — a plain <textarea> bound to the node's text content,
+// with Save (overwrites the original file) and Save As... (writes a new file via the shared
+// filePicker in 'save' mode) buttons in a small toolbar pinned to the bottom of the window.
 function openTextEditor(n){
   const win=WM.create({title:n.name+' — TextEdit', fileId:n.id, systemApp:'texteditor', width:560,height:440});
   win.appName='TextEdit';
@@ -2105,14 +2452,20 @@ function openTextEditor(n){
   bar.appendChild(saveas); bar.appendChild(save);
   win.body.appendChild(bar);
 }
+// openImageViewer : hands off to the BenViewer system app (rather than a bespoke inline viewer) so
+// images get the same zoom/rotate/etc. tooling regardless of where they were opened from.
 function openImageViewer(n){
   launchSystemApp('benviewer', null, null, n);
 }
+// openVideoViewer : a bare-bones video player window — just a native <video> element with browser
+// controls, pointed at the node's content (expected to be a data: or blob: URL).
 function openVideoViewer(n){
   const win=WM.create({title:n.name,fileId:n.id,systemApp:'player',width:640,height:420});
   win.body.style.background='#000';
   win.body.innerHTML='<video src="'+(n.content||'')+'" controls style="width:100%;height:100%;background:#000"></video>';
 }
+// openAbout : the "About This BenOS" dialog — shows the logo, version/build, current user, and live
+// storage stats pulled from FS.stats().
 function openAbout(){
   const s=FS.stats();
   showDialog({icon:'<img src="'+BENOS.logo+'" style="width:46px;height:46px;border-radius:10px;vertical-align:middle">',title:'BenOS HTML Edition',body:'Version '+BENOS.version+' (Build '+BENOS.build+')\n\nUser: '+BENOS.user+'\nFiles: '+s.files+'   Folders: '+s.folders+'\nStorage used: '+fmtSize(s.bytes)+'\n\nA single-file operating system for the browser.\nHTML · CSS · JavaScript — no frameworks.'});
@@ -2121,31 +2474,52 @@ function openAbout(){
 /* ===================================================================== */
 /* SYSTEM POWER ACTIONS                                                    */
 /* ===================================================================== */
+// confirmAction : tiny helper for "are you sure?" prompts — shows a Cancel/OK dialog and only runs
+// `fn` if OK is clicked, used for anything destructive/disruptive enough to warrant confirmation
+// (restart, shut down, log out).
 function confirmAction(msg,fn){ showDialog({icon:'⚠️',title:msg,buttons:[{label:'Cancel'},{label:'OK',primary:true,onClick:fn}]}); }
+// logOut : force-closes every open window (silent=true so onClose "unsaved changes" prompts don't
+// block logging out), fades the desktop away, then shows the login screen again.
 function logOut(){
   [...WM.windows.values()].forEach(w=>WM.close(w,true));
   $('#desktop').style.opacity='0';$('#menubar').style.display='none';$('#dock-wrap').style.display='none';
   setTimeout(()=>{ $('#desktop').style.display='none'; showLogin(); },600);
 }
+// restartOS : simulates a restart by closing all windows, resetting the booted flag, hiding the
+// desktop chrome, and simply re-running boot() from scratch (no actual page reload needed since BenOS
+// already reloads its state fresh from FS/DB every time boot() runs).
 function restartOS(){
   [...WM.windows.values()].forEach(w=>WM.close(w,true));
   BENOS.booted=false;
   $('#desktop').style.display='none';$('#menubar').style.display='none';$('#dock-wrap').style.display='none';
   boot();
 }
+// shutdownOS : the "hard stop" — closes windows, then wipes the entire page body and replaces it with
+// a plain "powered off" message and a manual reload link (unlike restartOS, this doesn't reboot itself).
 function shutdownOS(){
   [...WM.windows.values()].forEach(w=>WM.close(w,true));
   document.body.innerHTML='<div style="position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;color:#444;font-size:20px">BenOS HTML Edition is now off. <span style=margin-left:8px;cursor:pointer;color:#888 onclick="location.reload()">⟳ Power On</span></div>';
 }
+// sleepScreen : dims the screen behind a black overlay that fades in, and wakes back up (fades out
+// and removes itself) on the next click anywhere — a lightweight stand-in for a real sleep/wake cycle.
 function sleepScreen(){
   const o=el('div'); o.style.cssText='position:fixed;inset:0;background:#000;z-index:9400;transition:opacity .6s;opacity:0;';
   document.body.appendChild(o); setTimeout(()=>o.style.opacity='1',15);
   o.onclick=()=>{ o.style.opacity='0'; setTimeout(()=>o.remove(),600); };
 }
+// lockScreen : re-shows the login screen without touching any open windows/state underneath — the
+// desktop is still fully intact, just hidden behind the login UI until the user signs back in.
 function lockScreen(){ showLogin(); $('#login').style.opacity='1'; $('#login').style.display='flex'; }
 /* ===================================================================== */
 /* DESKTOP EVENTS — global wiring                                          */
 /* ===================================================================== */
+// wireDesktopEvents : attaches every desktop-level (as opposed to per-window or per-app) event
+// listener, all in one place: dismissing open menus/panels on an outside click, right-click menus for
+// empty desktop space, the menu bar's icon buttons (Spotlight/notifications/wifi/control center),
+// Spotlight's live search + keyboard navigation, global keyboard shortcuts (Ctrl+Space for Spotlight,
+// Escape to close overlays, Cmd/Ctrl+W to close the focused window), drag-and-drop import of real
+// files from the user's computer onto the desktop, keeping maximized windows sized to the viewport on
+// browser resize, and (further below) an edge-drag helper.
 function wireDesktopEvents(){
   // dismiss menus on click anywhere
   document.addEventListener('mousedown',e=>{
@@ -2193,6 +2567,9 @@ function wireDesktopEvents(){
 
   window.addEventListener('resize',()=>{ [...WM.windows.values()].forEach(w=>{ if(w.maximized){w.el.style.width=window.innerWidth+'px';w.el.style.height=window.innerHeight+'px';} }); });
 
+  // Auto-hide-and-reveal the menu bar/dock while any window is maximized (macOS-style fullscreen
+  // behavior): moving the mouse to the very top or bottom edge of the screen reveals the corresponding
+  // bar, and after 1.5s without the mouse sitting back at an edge, both are hidden again.
   let edgeTimer=null;
   document.addEventListener('mousemove',e=>{
     const anyMax=[...WM.windows.values()].some(w=>w.maximized);
@@ -2214,7 +2591,12 @@ function wireDesktopEvents(){
   });
 }
 
-/* import a FileList into a target folder, persisting permanently */
+/* import a FileList into a target folder, persisting permanently.
+   Called from every "drag files from your real computer into BenOS" drop zone. Small text files
+   (<500KB) are read and stored as plain strings (readable/editable in TextEdit); everything else
+   (images, audio, larger files) is stored as a base64 data URL instead, since that's the only way to
+   preserve arbitrary binary content in this virtual FS. Continues past individual file failures
+   (reporting each via benRecoverable) so one bad file doesn't abort the whole batch. */
 async function importFiles(fileList, parentId){
   let count=0;
   for(const f of fileList){
@@ -2230,6 +2612,8 @@ async function importFiles(fileList, parentId){
   refreshAfterFS(parentId);
   if(count) notify('Files imported', count+' file'+(count>1?'s':'')+' added to '+FS.pathOf(parentId),'📥');
 }
+// readFileAs : promisified FileReader — reads a real browser File either as plain text ('text') or as
+// a base64 data: URL (anything else), used by importFiles above.
 function readFileAs(file,mode){
   return new Promise((res,rej)=>{
     const r=new FileReader();
@@ -2242,6 +2626,9 @@ function readFileAs(file,mode){
 /* ===================================================================== */
 /* AUDIO SYSTEM — global volume manager                                    */
 /* ===================================================================== */
+// Audio$ : a tiny registry so the menu bar's master volume/mute control can affect every playing
+// <audio>/<video> element at once (e.g. BenMusic playback), without each app having to poll BENOS
+// state itself — apps just call Audio$.register(element) once and its volume stays in sync from then on.
 const Audio$={
   elements:new Set(),
   register(a){ Audio$.elements.add(a); a.volume=BENOS.muted?0:BENOS.volume; },
@@ -2252,6 +2639,11 @@ const Audio$={
 /* ===================================================================== */
 /* PREINSTALLED APP — FILES (Finder-style file manager)                    */
 /* ===================================================================== */
+// buildFilesApp : constructs a full Finder-like window — toolbar (back/forward/up, path, view toggle,
+// search), a favorites sidebar, and a main pane that renders the current folder either as an icon grid
+// or a detail list. Each Files window keeps its own independent navigation state (cwd/history/hpos)
+// via closures, so multiple Files windows can browse different folders simultaneously. win.refresh is
+// exposed so refreshAfterFS() (elsewhere) can tell this specific window to redraw after an FS change.
 function buildFilesApp(win, startId){
   win.appName='Files';
   let cwd=startId||'desktop';
@@ -2279,6 +2671,7 @@ function buildFilesApp(win, startId){
 
   const main=$('#fmain',root), pathEl=$('#fpath',root), status=$('#fstatus',root), sidebar=$('#fsidebar',root);
 
+  // buildSidebar : redraws the favorites list, highlighting whichever favorite matches the current folder.
   function buildSidebar(){
     const favs=[['desktop','🖥','Desktop'],['documents','📄','Documents'],['downloads','⤓','Downloads'],['applications','📦','Applications'],['pictures','🖼','Pictures'],['music-folder','🎵','Music'],['trash','🗑','Trash'],['root','💽','Internal Disk']];
     sidebar.innerHTML='<div style="font-size:11px;color:#999;font-weight:700;margin:2px 4px 6px">FAVORITES</div>'+
@@ -2286,6 +2679,9 @@ function buildFilesApp(win, startId){
     $$('.fav',sidebar).forEach(f=>f.onclick=win.guard(()=>navigate(f.dataset.id)));
   }
 
+  // navigate : changes the current folder and pushes it onto this window's back/forward history,
+  // unless noHist is set (used by the back/forward buttons themselves, which move hpos without
+  // adding a new history entry).
   function navigate(id,noHist){
     cwd=id;
     if(!noHist){ history.splice(hpos+1); history.push(id); hpos=history.length-1; }
@@ -2293,6 +2689,10 @@ function buildFilesApp(win, startId){
   }
   win.refresh=()=>render();
 
+  // render : redraws everything below the toolbar for the current folder — sidebar highlight, the
+  // Trash-only "Empty Trash" button, and the item listing itself (icon grid or detail list, per
+  // `view`), filtered by the search box if it has text (a non-empty search searches the whole FS via
+  // FS.search rather than just the current folder, so results can come from anywhere).
   function render(){
     const folder=FS.get(cwd)||FS.get('desktop');
     cwd=folder.id;
@@ -2340,6 +2740,9 @@ function buildFilesApp(win, startId){
     status.textContent=s.length+' items'+(Clip.ids.length?'  ·  '+Clip.ids.length+' in clipboard':'');
   }
 
+  // fileTile : builds one icon-view tile for a file/folder — same drag-and-drop and double-click/
+  // right-click wiring as the list-view row above, just laid out as a vertical icon+label card instead
+  // of a horizontal row.
   function fileTile(n){
     const t=el('div'); t.style.cssText='width:96px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:8px;cursor:default;text-align:center';
     t.innerHTML='<div>'+iconHTML(n,52)+'</div><div style="font-size:12px;word-break:break-word;line-height:14px;max-width:92px">'+esc(n.name)+'</div>';
@@ -2406,6 +2809,8 @@ function buildFilesApp(win, startId){
 
   render();
 }
+// pickFiles : opens the browser's native file-picker dialog (a hidden <input type=file>) and imports
+// whatever the user selects into parentId — used by the Files app's "Import from Computer…" menu item.
 function pickFiles(parentId){
   const inp=el('input'); inp.type='file'; inp.multiple=true;
   inp.onchange=()=>{ if(inp.files.length)importFiles(inp.files,parentId); };
@@ -2414,6 +2819,9 @@ function pickFiles(parentId){
 /* ===================================================================== */
 /* PREINSTALLED APP — SETTINGS                                             */
 /* ===================================================================== */
+// buildSettingsApp : System Preferences-style app with a left-side tab list (Wallpaper/Dock/Users/
+// Storage/System) and a right-side content pane that swaps per tab. Each tab's content is built by
+// its own renderX() function further down (renderWall/renderDock/renderUsers/renderStorage/renderSystem).
 function buildSettingsApp(win){
   win.appName='Settings';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -2423,11 +2831,16 @@ function buildSettingsApp(win){
   root.innerHTML='<div id="setnav" style="width:170px;flex:0 0 170px;background:#ededf0;border-right:1px solid #d7d7da;padding:12px 8px"></div><div id="setbody" style="flex:1;overflow:auto;padding:22px 26px"></div>';
   const nav=$('#setnav',root), body=$('#setbody',root);
   const icons={Wallpaper:'🖼',Dock:'⭐',Users:'👤',Storage:'💾',System:'💻'};
+  // renderNav : redraws the tab list, highlighting the active tab and wiring clicks to switch tabs.
   function renderNav(){
     nav.innerHTML=tabs.map(t=>'<div class="snav" data-t="'+t+'" style="display:flex;gap:9px;padding:8px 10px;border-radius:7px;cursor:default;font-size:13px;align-items:center'+(t===active?';background:var(--accent);color:#fff':'')+'"><span>'+icons[t]+'</span>'+t+'</div>').join('');
     $$('.snav',nav).forEach(s=>s.onclick=win.guard(()=>{active=s.dataset.t;renderNav();renderBody();}));
   }
+  // card : shared visual wrapper (white rounded box + heading) used by every settings section so all
+  // tabs look consistent without repeating the same markup everywhere.
   function card(title,inner){ return '<div class="set-card" style="background:#fff;border:1px solid #e3e3e6;border-radius:10px;padding:18px;margin-bottom:16px"><h3 style="font-size:14px;margin-bottom:12px">'+title+'</h3>'+inner+'</div>'; }
+  // renderBody : dispatches to the correct tab-content renderer and replays a fade-in animation on
+  // every tab switch (forcing a reflow via body.offsetWidth so re-adding the same class restarts it).
   function renderBody(){
     body.classList.remove('set-fade-in'); void body.offsetWidth; body.classList.add('set-fade-in');
     if(active==='Wallpaper')renderWall();
@@ -2436,6 +2849,11 @@ function buildSettingsApp(win){
     else if(active==='Storage')renderStorage();
     else renderSystem();
   }
+  // renderWall : the Wallpaper tab — shows a grid of every available wallpaper (local + remote,
+  // via getWallpaperEntries) as clickable thumbnails, a text field for pasting a custom image URL, a
+  // reset-to-default button, and a live monitor-shaped preview of whichever wallpaper is selected.
+  // Thumbnails start as plain gray boxes and are filled in with real images asynchronously afterward
+  // (fetching/decoding each cached asset takes a moment), so the grid appears instantly either way.
   async function renderWall(){
     const cur=FS.getMeta('wallpaper',null);
     const bgs=getWallpaperEntries();
@@ -2460,15 +2878,24 @@ function buildSettingsApp(win){
     $('#wpset',body).onclick=win.guard(async()=>{const u=$('#wpurl',body).value.trim();if(u)await setWall(u);});
     $('#wpreset',body).onclick=win.guard(async()=>{await setWall(null);});
   }
+  // setWall : persists the chosen wallpaper reference (an asset key, a custom URL, or null to reset
+  // to default), re-applies it live, and refreshes the tab so the new selection shows as checked.
   async function setWall(u){ await FS.setMeta('wallpaper',u); applyWallpaper(); playSound('change'); renderWall(); notify('Wallpaper changed','Desktop background updated','🖼'); }
+  // renderDock : the Dock tab — a size slider (36-80px, live-applied via buildDock on every change)
+  // and a read-only summary of which items are currently pinned.
   function renderDock(){
     const size=FS.getMeta('dockSize',52);
     body.innerHTML=card('Dock Size','<input type="range" id="dsize" min="36" max="80" value="'+size+'" style="width:100%"><div style="font-size:12px;color:#888;margin-top:6px">Current: <span id="dsv">'+size+'</span>px</div>')
       +card('Dock Items','<div style="font-size:12px;color:#888">'+FS.getMeta('dock',[]).map(id=>(FS.get(id)||{}).name||'?').join(', ')+'</div><div style="font-size:11px;color:#aaa;margin-top:8px">Tip: right-click an app and choose “Pin to Dock”, or right-click a Dock icon to remove it.</div>');
     $('#dsize',body).oninput=win.guard(async e=>{ const v=+e.target.value; $('#dsv',body).textContent=v; await FS.setMeta('dockSize',v); buildDock(); });
   }
+  // renderUsers : the Users tab — lists every account with password/hint status and per-user actions
+  // (change/remove password, set/edit hint, delete — delete is hidden when it's the only account left
+  // since BenOS always needs at least one user), plus a form to add a new account. Edits a local deep
+  // copy of the user list and only writes it back to FS meta via commit() once an action completes.
   function renderUsers(){
     const users=JSON.parse(JSON.stringify(getUsers()));
+    // commit : persists the working copy of `users` back to FS metadata and re-renders the tab.
     async function commit(){ await FS.setMeta('users',users); renderUsers(); }
     body.innerHTML=card('User Accounts',
       users.map((u,i)=>'<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eee">'+
@@ -2488,6 +2915,9 @@ function buildSettingsApp(win){
     $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users.length<=1)return; const nm=users[i].name; users.splice(i,1); await commit(); notify('User removed',nm,'👤'); }));
     $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
   }
+  // renderStorage : the Storage tab — a usage bar against a nominal 512MB virtual quota, a
+  // files/folders breakdown, and which storage backend is actually in use (with a warning if it's the
+  // non-persistent in-memory fallback).
   function renderStorage(){
     const s=FS.stats(); const total=512*1048576; const pct=Math.min(100,(s.bytes/total)*100);
     const engine = DB.mode==='idb'?'IndexedDB (persistent)':(DB.mode==='local'?'localStorage (persistent, ~5 MB)':'In-memory (not saved after the page closes)');
@@ -2497,6 +2927,9 @@ function buildSettingsApp(win){
       +card('Contents','<div style="font-size:13px;line-height:1.9"><div>📄 Files: <b>'+s.files+'</b></div><div>📁 Folders: <b>'+s.folders+'</b></div><div>💾 Total items: <b>'+(s.files+s.folders)+'</b></div></div>')
       +card('Storage Engine','<div style="font-size:13px">Backend: <b>'+engine+'</b></div>'+(DB.mode==='memory'?'<div style="font-size:11px;color:#c0392b;margin-top:6px">⚠️ Persistent storage is blocked in this context. Serve BenOS over http:// for permanent saving.</div>':''));
   }
+  // renderSystem : the System tab — version/build/user/resolution/browser/storage-engine summary,
+  // details of the last metadata download from GitHub (if any), the power actions (Restart/Shut Down/
+  // Log Out), and the destructive factory-reset button.
   function renderSystem(){
     const s=FS.stats();
     body.innerHTML=card('About This BenOS',
@@ -2522,6 +2955,11 @@ function buildSettingsApp(win){
 /* ===================================================================== */
 /* PREINSTALLED APP — TERMINAL                                             */
 /* ===================================================================== */
+// buildTerminalApp : a small shell emulator ("bensh") over the virtual filesystem — a scrolling output
+// pane plus a single input line styled to look like a real terminal prompt. `cwd` here is the
+// terminal's own working directory (independent of any Files window), and `hist`/`hp` back the
+// up/down-arrow command history. The actual command implementations are wired up further below this
+// setup (ls/cd/cat/mkdir/etc., dispatched from whatever's typed into `inp`).
 function buildTerminalApp(win){
   win.appName='Terminal';
   win.body.style.background='#1e1e1e';
@@ -2556,12 +2994,20 @@ function buildTerminalApp(win){
     }
     return cur;
   }
+  // parentAndName : splits a path like "docs/notes.txt" into its containing folder node (resolved via
+  // resolve()) and the final path segment — used by commands that need to create/write a file by path
+  // (e.g. `echo text > file`) rather than open an existing one.
   function parentAndName(p){
     const parts=p.split('/').filter(x=>x.length); const name=parts.pop();
     const dir = parts.length? resolve((p.startsWith('/')?'/':'')+parts.join('/')) : FS.get(cwd);
     return {dir,name};
   }
 
+  // cmds : the command table — each key is a command name, each value a function(args, rawLine) that
+  // implements it against the virtual FS (via resolve/parentAndName/FS.*), printing output/errors with
+  // `print`. Mirrors familiar POSIX shell commands (ls/cd/pwd/mkdir/touch/cat/echo/rm/cp/mv) plus a few
+  // BenOS-specific ones (open, tree, neofetch). Any command that mutates the FS calls afterFS() to
+  // refresh the desktop/Files windows to match.
   const cmds={
     help(){ print('Available commands:\n  help            show this help\n  ls [path]       list directory contents\n  cd <path>       change directory\n  pwd             print working directory\n  mkdir <name>    create a folder\n  touch <name>    create an empty file\n  cat <file>      print file contents\n  echo <text>     print text  (echo text > file to write)\n  rm <name>       remove a file or folder\n  cp <a> <b>      copy\n  mv <a> <b>      move/rename\n  open <name>     open a file/app in a window\n  tree            show the file tree\n  clear           clear the screen\n  whoami          current user\n  date            current date/time\n  neofetch        system info'); },
     ls(a){ const t=a[0]?resolve(a[0]):FS.get(cwd); if(!t){print('ls: no such file or directory: '+a[0],'#ff6b6b');return;} if(t.type!=='folder'){print(t.name);return;} const c=FS.children(t.id).sort((x,y)=>x.name.localeCompare(y.name)); if(!c.length){return;} print(c.map(n=>n.type==='folder'?n.name+'/':n.name).join('   ')); },
@@ -2581,8 +3027,14 @@ function buildTerminalApp(win){
     date(){ print(new Date().toString()); },
     neofetch(){ const s=FS.stats(); print('       BenOS HTML Edition\n   ___   OS: BenOS '+BENOS.version+'\n  (o o)  Build: '+BENOS.build+'\n  ( - )  User: '+BENOS.user+'\n  /   \\  Files: '+s.files+'  Folders: '+s.folders+'\n         Storage: '+fmtSize(s.bytes)+'\n         Shell: bensh','#7ec5ff'); },
   };
+  // afterFS : terminal-specific "FS changed" refresh — reuses the shared refreshAfterFS() and also
+  // explicitly nudges every open Files window (belt-and-suspenders, since the terminal's cwd may not
+  // be 'desktop' but could still be visible in an open Files window).
   function afterFS(){ refreshAfterFS(cwd); [...WM.windows.values()].forEach(w=>{if(w.systemApp==='files'&&w.refresh)w.refresh();}); }
 
+  // Enter runs the typed line (echoing it first, like a real terminal), splitting it into a command
+  // name + whitespace-separated args and looking it up in `cmds`; unknown commands print a
+  // "command not found" error instead of throwing. Up/Down arrows walk the command history.
   inp.addEventListener('keydown',win.guard(async e=>{
     if(e.key==='Enter'){
       const raw=inp.value; const line=raw.trim();
@@ -2601,6 +3053,11 @@ function buildTerminalApp(win){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENBROWSER                         */
 /* ===================================================================== */
+// buildBrowserApp : a tabbed web browser built entirely out of sandboxed <iframe>s (BenOS has no real
+// backend/proxy of its own to fetch pages with). Each tab is one iframe; navigating loads the target
+// URL through a public read-only proxy (r.jina.ai, see toEmbeddedUrl) since most real sites forbid
+// being framed directly (X-Frame-Options/CSP) — a page that still refuses to load shows the
+// "can't be embedded" fallback (showBlocked) with a link to open it in a real new browser tab instead.
 function buildBrowserApp(win){
   win.appName='BenBrowser';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -2617,18 +3074,30 @@ function buildBrowserApp(win){
     '<div id="viewport" style="flex:1;position:relative;background:#fff;min-height:0"><div class="bb-loadbar" id="bb-load"></div></div>';
   const vp=$('#viewport',root), omni=$('#omni',root), tabbar=$('#tabbar',root);
 
+  // The built-in start page (see startPage() below) posts a message up to this window when one of
+  // its quick-link tiles is clicked, since it can't navigate the iframe directly from inside its own
+  // sandboxed srcdoc — this listener catches that message and performs the actual navigation.
   window.addEventListener('message', win.guard(ev=>{
     if(!ev.data || ev.data.__benos !== true || ev.data.type !== 'browser-navigate') return;
     const url = ev.data.url;
     if(url) go(url);
   }));
 
+  // tabs : open tabs, each {id, title, url, frame, history, hpos}. activeTab is an index into it;
+  // tabSeq is an ever-incrementing counter used to hand out unique tab ids.
   let tabs=[], activeTab=0, tabSeq=0;
+  // startPage : the New Tab / home page markup — a small self-contained HTML document (quick links to
+  // a few sites + a test-download link) loaded via iframe.srcdoc. Its embedded script intercepts
+  // clicks on the quick-link tiles and posts them up to the real navigation logic (see the message
+  // listener above) instead of letting the sandboxed iframe try to navigate itself.
   function startPage(){
     return '<!DOCTYPE html><html><head><meta charset=utf-8><style>@keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}body{font-family:-apple-system,sans-serif;margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#eef3fb,#dfe7f5);color:#333}h1{font-size:46px;margin-bottom:6px;background:linear-gradient(90deg,#4285f4,#34a853,#fbbc05,#ea4335);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fu .5s ease}p{color:#888;margin-bottom:24px;animation:fu .5s ease .1s both}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:560px}.t{background:#fff;border-radius:12px;padding:16px 10px;text-align:center;text-decoration:none;color:#444;box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:13px;transition:transform .18s,box-shadow .18s;animation:fu .45s ease both}.t:hover{transform:translateY(-4px) scale(1.04);box-shadow:0 8px 22px rgba(0,0,0,.16)}.t b{display:block;font-size:26px;margin-bottom:6px}</style></head><body><h1>BenBrowser</h1><p>Your gateway to the web inside BenOS</p><div class=g>'+
     [['🔍','Search','https://duckduckgo.com/'],['📖','Wikipedia','https://www.wikipedia.org'],['🎨','Scratch','https://scratch.mit.edu'],['🌐','Example','https://example.com'],['🐙','GitHub','https://github.com'],['📚','MDN','https://developer.mozilla.org'],['⤓','Test Download','#download']].map((t,i)=>'<a class=t style="animation-delay:'+(i*0.05)+'s" href="'+t[2]+'" data-benbrowser="'+esc(t[2])+'" target="_self"><b>'+t[0]+'</b>'+t[1]+'</a>').join('')+
     '</div><script>document.querySelectorAll("a[data-benbrowser]").forEach(a=>{a.addEventListener("click",e=>{e.preventDefault();const url=a.getAttribute("data-benbrowser");window.parent.postMessage({__benos:true,type:"browser-navigate",url},"*");});});<\/script></body></html>';
   }
+  // newTab : creates a new tab's iframe (sandboxed, with just enough permissions for typical sites to
+  // function — scripts/forms/popups), adds it to `tabs`, makes it the active tab, and either navigates
+  // it to `url` immediately or loads the start page.
   function newTab(url){
     const id=++tabSeq;
     const frame=el('iframe'); frame.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:none;display:none';
@@ -2641,7 +3110,10 @@ function buildBrowserApp(win){
     return tab;
   }
   function loadStart(tab){ tab.frame.srcdoc=startPage(); tab.title='New Tab'; tab.url='about:start'; renderTabs(); }
+  // cur : the currently active tab record — shorthand used throughout instead of tabs[activeTab].
   function cur(){ return tabs[activeTab]; }
+  // renderTabs : redraws the tab strip from `tabs`, highlighting the active tab and wiring each tab's
+  // click-to-switch and ✕-to-close behavior, plus the trailing "+" button to open a new tab.
   function renderTabs(){
     tabbar.innerHTML='';
     tabs.forEach((t,i)=>{
@@ -2654,8 +3126,15 @@ function buildBrowserApp(win){
     const add=el('div'); add.textContent='+'; add.style.cssText='padding:7px 12px;cursor:default;font-size:16px;color:#555';
     add.onclick=()=>newTab(); tabbar.appendChild(add);
   }
+  // closeTab : removes a tab's iframe and record; if it was the last tab, opens a fresh one instead
+  // of leaving the browser with zero tabs (a browser window always has at least one tab).
   function closeTab(i){ tabs[i].frame.remove(); tabs.splice(i,1); if(!tabs.length){ newTab(); return; } activeTab=Math.max(0,activeTab-(i<=activeTab?1:0)); showActive(); renderTabs(); }
+  // showActive : shows only the active tab's iframe (all others hidden via display:none — they stay
+  // alive in the background rather than being torn down) and syncs the address bar to its URL.
   function showActive(){ tabs.forEach((t,i)=>t.frame.style.display=i===activeTab?'block':'none'); const t=cur(); omni.value=t.url==='about:start'?'':t.url; }
+  // normalizeBrowserUrl : turns whatever the user typed into the address bar into an actual URL to
+  // load — passes through recognized protocols/URLs as-is, assumes a bare "example.com"-looking string
+  // is a domain (prepending https://), and otherwise treats the input as a search query.
   function normalizeBrowserUrl(input){
     let value=input.trim();
     if(!value) return 'about:start';
@@ -2666,12 +3145,21 @@ function buildBrowserApp(win){
     if(/^[\w.-]+(?:\.[\w.-]+)+(?:\/|$)/.test(value)) return 'https://'+value;
     return 'https://duckduckgo.com/?q='+encodeURIComponent(value);
   }
+  // toEmbeddedUrl : rewrites a normal http(s) URL to load through the r.jina.ai read-only proxy, which
+  // strips the target site's framing/embedding restrictions so it can actually render inside our
+  // sandboxed iframe (a direct iframe src to most real websites would otherwise be blocked by their
+  // own X-Frame-Options/CSP headers). Non-http(s) URLs (about:start, etc.) pass through unchanged.
   function toEmbeddedUrl(url){
     if(!url || url==='about:start') return url;
     if(!/^https?:\/\//i.test(url)) return url;
     const protocol = /^https:/i.test(url) ? 'https://' : 'http://';
     return 'https://r.jina.ai/' + protocol + url.replace(/^https?:\/\//i,'');
   }
+  // go : the main navigation function — normalizes the input, updates tab/address-bar state, starts
+  // the loading-bar animation, and points the iframe at the proxied URL. `t.frame.onload`/`onerror`
+  // both just stop the loading bar (there's no reliable way to detect an X-Frame-Options block from
+  // JS alone, so a refused embed still "finishes loading" — it just shows blank/broken content;
+  // showBlocked() is used separately for cases that can be detected).
   function go(input){
     const t=cur(); let url=normalizeBrowserUrl(input);
     if(url==='#download'){ doTestDownload(); return; }
@@ -2684,6 +3172,8 @@ function buildBrowserApp(win){
     t.frame.src=toEmbeddedUrl(url);
   }
   // Loading progress bar -------------------------------------------------
+  // A cosmetic progress bar (there's no real per-byte loading progress available from a cross-origin
+  // iframe) that creeps toward 90% while "loading" and snaps to 100% on the iframe's load/error event.
   const loadbar=$('#bb-load',root); let loadTimer=null;
   function startLoad(){
     if(loadTimer)clearInterval(loadTimer);
@@ -2697,12 +3187,18 @@ function buildBrowserApp(win){
     loadbar.style.width='100%';
     setTimeout(()=>{ loadbar.style.opacity='0'; setTimeout(()=>{loadbar.style.width='0%';},250); },200);
   }
+  // showBlocked : replaces a tab's content with an explanatory "this site can't be embedded" page
+  // (currently unused in the automatic load path since detecting an actual frame-refusal isn't
+  // reliably possible from JS, but kept available/wired for any future detection path), with a link
+  // to open the real site in an actual new browser tab instead.
   function showBlocked(t,url){
     try{
       t.blocked=true;
       t.frame.srcdoc='<!DOCTYPE html><body style="font-family:-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;color:#555;text-align:center;padding:30px;background:linear-gradient(160deg,#f7f9fc,#e9eef6)"><div style="font-size:50px">\u{1F512}</div><h2 style="margin:10px 0">This site can\'t be embedded</h2><p style="color:#999;max-width:440px;line-height:1.5">'+esc(url)+' refuses to load inside a frame for security (X-Frame-Options / Content-Security-Policy). This is set by the website itself \u2014 most large sites such as Google, YouTube and many others block embedding.</p><a href="'+esc(url)+'" target="_blank" rel="noopener" style="margin-top:18px;background:#4285f4;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600">Open in a real browser tab \u2197</a></body>';
     }catch(e){}
   }
+  // doTestDownload : the "#download" special link on the start page — demonstrates the download flow
+  // by generating a small SVG image on the fly and saving it into the Downloads folder via benDownload.
   async function doTestDownload(){
     // a real download saved into the BenOS Downloads folder
     const data='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#4285f4"/><text x="200" y="160" font-size="30" fill="white" text-anchor="middle" font-family="sans-serif">BenBrowser Download</text></svg>');
@@ -2721,7 +3217,10 @@ function buildBrowserApp(win){
   omni.addEventListener('keydown',win.guard(e=>{ if(e.key==='Enter'&&omni.value.trim())go(omni.value); }));
   newTab();
 }
-/* Download handler used by the browser — saves into Downloads/ permanently */
+/* Download handler used by the browser — saves into Downloads/ permanently.
+   Since BenOS has no real network downloads, "downloading" just means writing the already-in-memory
+   content (a data URI, typically) as a new file into the Downloads folder, then notifying the user —
+   the same end result a real browser download achieves, minus any actual network transfer. */
 async function benDownload(name,content,mime){
   const kind=kindFromName(name,mime);
   const f=await FS.createFile('downloads',name,content,kind);
@@ -2733,6 +3232,10 @@ async function benDownload(name,content,mime){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENMUSIC                      */
 /* ===================================================================== */
+// buildMusicApp : the music player app. Its library is assembled from three sources (see library()):
+// tracks downloaded from the BenOS metadata repo, any audio files the user has imported into the
+// virtual FS, and a single always-present synthesized demo track. autoplayNode, when passed (e.g.
+// opening an audio file from Files), should start that specific track playing immediately.
 function buildMusicApp(win, autoplayNode){
   win.appName='BenMusic';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -2746,8 +3249,14 @@ function buildMusicApp(win, autoplayNode){
     list.push({name:'BenOS Theme',artist:'System Sounds',src:null,art:'#fc2c55',demo:true});
     return list;
   }
+  // tracks/idx : the library snapshot and the index of the currently loaded track.
+  // playing/repeat : simple playback-state flags reflected in the transport button UI.
   let tracks=library(), idx=0, playing=false, repeat=false;
+  // audio : the one shared <audio> element used for every real (non-demo) track — registered with
+  // Audio$ so the system volume/mute controls affect it automatically.
   const audio=new Audio(); Audio$.register(audio);
+  // demoCtx/demoNodes : Web Audio API state for the synthesized "BenOS Theme" demo track, which isn't
+  // a real audio file at all — see playDemo() further down for how it's generated.
   let demoCtx=null, demoNodes=[];
 
   root.innerHTML=
@@ -2777,6 +3286,8 @@ function buildMusicApp(win, autoplayNode){
     '</div>';
 
   const listEl=$('#mlist',root);
+  // renderList : redraws the track list from a fresh library() snapshot, highlighting whichever
+  // track is loaded (idx) and showing a note glyph that changes while playing.
   function renderList(){
     tracks=library();
     listEl.innerHTML='<div style="font-size:20px;font-weight:700;padding:18px 18px 8px">Songs</div>'+
@@ -2784,8 +3295,14 @@ function buildMusicApp(win, autoplayNode){
     $$('.mrow',listEl).forEach(r=>r.ondblclick=win.guard(()=>{ idx=+r.dataset.i; play(); }));
     $$('.mrow',listEl).forEach(r=>r.onclick=()=>{ idx=+r.dataset.i; });
   }
+  // fmtT : formats seconds as "M:SS" for the current-time/duration labels.
   function fmtT(s){ s=Math.floor(s||0); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+  // stopDemo : tears down the Web Audio context used for the synthesized demo track, if one is running.
   function stopDemo(){ if(demoCtx){ try{demoNodes.forEach(n=>{try{n.stop();}catch(e){}});demoCtx.close();}catch(e){} demoCtx=null;demoNodes=[]; } }
+  // playDemo : "plays" the BenOS Theme demo track by literally synthesizing a short melody with the
+  // Web Audio API (a fixed note sequence, one oscillator per note) rather than decoding an audio file —
+  // there is no actual demo audio asset. Progress/duration are simulated with a real-time tick() loop
+  // driven off performance.now() rather than any native <audio> playback events, since none exist here.
   function playDemo(){
     stopDemo();
     demoCtx=new (window.AudioContext||window.webkitAudioContext)();
@@ -2800,6 +3317,10 @@ function buildMusicApp(win, autoplayNode){
     master._m=master;
     win._demoMaster=master;
   }
+  // play : loads and starts the current track (idx). If it's a metadata track whose audio hasn't
+  // been downloaded yet (t.metaKey set, t.src not yet filled in), fetches/caches it first via
+  // assetData — showing "Loading…"/"Downloading… try again shortly" in the artist line while that
+  // happens. Demo tracks go through playDemo() instead of the real <audio> element.
   async function play(){
     const t=tracks[idx]; if(!t)return;
     $('#mtitle',root).textContent=t.name; $('#martist',root).textContent=t.artist;
@@ -2820,15 +3341,22 @@ function buildMusicApp(win, autoplayNode){
     }
     renderList(); updateNowPlaying();
   }
+  // pause : stops playback (real audio and/or the demo synth) and resets the transport UI.
   function pause(){ playing=false; $('[data-m=play]',root).textContent='▶'; $('#mart',root).classList.remove('spin-art'); $('#mart',root).style.borderRadius='8px'; audio.pause(); stopDemo(); if(win._demoMaster){try{win._demoMaster.gain.value=0;}catch(e){}} renderList(); updateNowPlaying(); }
   function toggle(){ playing?pause():play(); }
+  // updateNowPlaying : publishes the current track/playing-state into the global NowPlaying object
+  // (see the Control Center section) so the menu bar's Control Center can show/control playback
+  // without needing a direct reference into this specific music window.
   function updateNowPlaying(){
     const t=tracks[idx]||{};
     NowPlaying.title=t.name||null; NowPlaying.artist=t.artist||null; NowPlaying.playing=playing;
     NowPlaying._toggle=toggle; NowPlaying._win=win;
     if(typeof refreshControlCenter==='function') refreshControlCenter();
   }
+  // refreshLib : called after the background music download completes (see downloadMusicAssets) —
+  // rebuilds the library and tries to keep the same track selected by name if it's still present.
   win.refreshLib=()=>{ const wasName=(tracks[idx]||{}).name; tracks=library(); const ni=tracks.findIndex(t=>t.name===wasName); if(ni>=0)idx=ni; renderList(); };
+  // next/prev : advance the track index (wrapping around at either end) and start playing it.
   function next(){ idx=(idx+1)%tracks.length; play(); }
   function prev(){ idx=(idx-1+tracks.length)%tracks.length; play(); }
 
@@ -2848,6 +3376,10 @@ function buildMusicApp(win, autoplayNode){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENHEALTH                  */
 /* ===================================================================== */
+// buildHealthApp : a fitness/health-tracking dashboard (water/sleep/steps) with progress rings and a
+// 7-day history chart. There's no real sensor data source, so all metrics are manually adjustable by
+// the user and persisted per-day in FS metadata; a new day (or first run) seeds a plausible-looking
+// randomized 7-day history so the chart isn't empty on first use.
 function buildHealthApp(win){
   win.appName='BenHealth';
   const root=el('div'); root.style.cssText='height:100%;overflow:auto;background:#f2f3f5;padding:18px';
@@ -2861,19 +3393,30 @@ function buildHealthApp(win){
     data={day:today, water:0, sleep:7.0, steps:0, goalWater:8, goalSteps:10000,
       hist: seedHistory()};
   }
+  // seedHistory : generates a deterministic-but-varied fake 7-day history (steps/water/sleep per day)
+  // using simple modular arithmetic instead of Math.random, so the "history" chart looks populated
+  // and realistic without needing any real tracked data.
   function seedHistory(){
     const h=[]; const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     for(let i=0;i<7;i++) h.push({d:labels[i], steps:3000+((i*2671)%7000), water:4+((i*3)%6), sleep:6+((i*7)%4)});
     return h;
   }
+  // save : persists the current day's data back to FS metadata (called after every user edit).
   async function save(){ data.day=today; await FS.setMeta('health',data); }
 
+  // ring : builds one SVG progress ring (like an Apple Watch activity ring) — a full background
+  // circle plus a foreground arc whose stroke-dashoffset is set so exactly `pct` of its circumference
+  // is drawn, with a percentage label in the center and a caption/value underneath.
   function ring(pct,color,label,val){
     const r=34, c=2*Math.PI*r, off=c*(1-Math.min(1,pct));
     return '<div style="text-align:center"><svg class="health-ring" width="90" height="90" viewBox="0 0 90 90"><circle cx=45 cy=45 r='+r+' fill=none stroke=#e3e3e6 stroke-width=8/><circle class="fg" style="--c:'+c+';--off:'+off+'" cx=45 cy=45 r='+r+' fill=none stroke="'+color+'" stroke-width=8 stroke-linecap=round stroke-dasharray="'+c+'" stroke-dashoffset="'+off+'" transform="rotate(-90 45 45)"/><text x=45 y=49 text-anchor=middle font-size=15 font-weight=700 fill=#333>'+Math.round(pct*100)+'%</text></svg><div style="font-size:12px;font-weight:600;margin-top:2px">'+label+'</div><div style="font-size:11px;color:#999">'+val+'</div></div>';
   }
+  // card : shared white rounded-box wrapper for each dashboard section (same visual role as the
+  // Settings app's card() helper).
   function card(inner){ return '<div class="health-card" style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)">'+inner+'</div>'; }
 
+  // render : rebuilds the whole dashboard — today's progress rings (water/steps/sleep vs. goals) and
+  // the 7-day history bar chart — from the current `data` state.
   function render(){
     root.innerHTML=
       '<h2 style="font-size:22px;margin-bottom:4px">Today</h2><div style="font-size:12px;color:#999;margin-bottom:16px">'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>'+
@@ -2898,6 +3441,8 @@ function buildHealthApp(win){
       await save(); render();
     }));
   }
+  // drawChart : renders the 7-day step-count history as a gradient bar chart on a <canvas>, scaling
+  // bar heights against whichever is larger — the daily step goal or the tallest actual value in history.
   function drawChart(){
     const cv=$('#hchart',root); if(!cv)return; const ctx=cv.getContext('2d');
     const W=cv.width,H=cv.height; ctx.clearRect(0,0,W,H);
@@ -2919,7 +3464,12 @@ function buildHealthApp(win){
 /* ===================================================================== */
 /* BOOTSTRAP                                                               */
 /* ===================================================================== */
+// The fatal-error screen's "Restart" button just reloads the whole page — the simplest possible
+// recovery from a truly unrecoverable error, since it re-runs everything from a clean slate.
 $('#fatal-restart').onclick=()=>location.reload();
+// Entry point: once the page has fully loaded, kick off the boot sequence. Any error thrown out of
+// boot() itself (as opposed to errors during normal operation, which go through benRecoverable) is
+// treated as fatal, since it means BenOS failed to even start.
 window.addEventListener('load',()=>{
   // restore persisted volume after FS loads happens in boot; just kick off boot
   boot().catch(e=>benFatal(e.message||String(e)));
@@ -2927,7 +3477,12 @@ window.addEventListener('load',()=>{
 /* ===================================================================== */
 /* WI-FI PANEL — English, BenConnect, live ping every 5s                   */
 /* ===================================================================== */
+// _wifiTimer : the interval id for the repeating ping while the Wi-Fi panel is open — cleared when
+// the panel closes so it doesn't keep pinging in the background forever.
 let _wifiTimer=null;
+// openWifiPanel : toggles the Wi-Fi status dropdown (from the menu bar wifi icon) — shows a fake
+// "BenConnect" network name/status and starts a live ping loop (pingNow, once immediately then every
+// second) so the displayed latency actually updates while the panel is open.
 function openWifiPanel(){
   const p=$('#wifi-panel');
   if(p.style.display==='block'){ closeWifiPanel(); return; }
@@ -2943,6 +3498,10 @@ function openWifiPanel(){
   _wifiTimer=setInterval(pingNow,1000);
 }
 function closeWifiPanel(){ const p=$('#wifi-panel'); p.style.display='none'; if(_wifiTimer){clearInterval(_wifiTimer);_wifiTimer=null;} }
+// pingNow : measures a real round-trip latency by timing how long it takes an <img> element to
+// load (or fail to load) a tiny resource from a real external site — the browser has no direct "ping"
+// API, so this image-load trick is the standard workaround. Both success and failure resolve a timing,
+// since even a failed/blocked request still took time; only a very slow failure is treated as "offline".
 function pingNow(){
   const site='scratch.mit.edu';
   const pingEl=$('#wifi-ping'), statEl=$('#wifi-status');
@@ -2976,11 +3535,20 @@ document.addEventListener('mousedown',e=>{
 /* ===================================================================== */
 /* CONTROL CENTER — quick settings: Sound, Brightness, Now Playing         */
 /* ===================================================================== */
+// NowPlaying : global "now playing" state published by BenMusic (see updateNowPlaying in
+// buildMusicApp) so the Control Center can show/control playback without a direct reference to
+// whichever music window is open. _toggle/_win let the Control Center's play/pause button reach back
+// into that specific window's controls.
 const NowPlaying = { title:null, artist:null, playing:false, _toggle:null, _win:null };
+// applyBrightness : simulates a display brightness control by dimming the whole screen through a
+// semi-transparent black overlay (there's no real way to control the user's actual monitor
+// brightness from a web page) — capped at 80% max darkness so the UI never becomes fully unusable.
 function applyBrightness(){
   const b=FS.getMeta('brightness',1);
   const ov=$('#brightness-overlay'); if(ov) ov.style.opacity=String(Math.min(0.8,Math.max(0,1-b)));
 }
+// openControlCenter/closeControlCenter : toggles the quick-settings panel (from the menu bar control
+// center icon), refreshing its contents every time it opens.
 function openControlCenter(){
   const cc=$('#control-center');
   if(cc.style.display==='block'){ closeControlCenter(); return; }
@@ -2988,6 +3556,10 @@ function openControlCenter(){
   refreshControlCenter();
 }
 function closeControlCenter(){ const cc=$('#control-center'); if(cc)cc.style.display='none'; }
+// refreshControlCenter : redraws the Control Center's contents (volume/brightness sliders + the Now
+// Playing card) from current state. Called both when the panel opens and whenever something it
+// displays changes elsewhere (e.g. BenMusic calling this after every play/pause). No-ops if the panel
+// isn't currently open, so callers can call it unconditionally without checking visibility themselves.
 function refreshControlCenter(){
   const cc=$('#control-center'); if(!cc || cc.style.display!=='block') return;
   const vol=Math.round((BENOS.muted?0:BENOS.volume)*100);
@@ -3013,6 +3585,8 @@ document.addEventListener('mousedown',e=>{
 /* ===================================================================== */
 /* FACTORY RESET — wipe all stored data and reboot fresh                   */
 /* ===================================================================== */
+// factoryReset : the confirmation gate in front of doFactoryReset — a destructive, irreversible
+// action, so it always requires an explicit "Erase Everything" confirmation first.
 function factoryReset(){
   showDialog({
     icon:'⚠️', title:'Restore Factory Settings',
@@ -3023,6 +3597,13 @@ function factoryReset(){
     ]
   });
 }
+// doFactoryReset : wipes every storage layer BenOS might be using — the in-memory FS/DB maps,
+// localStorage's serialized fs/meta blobs, and the actual IndexedDB database itself — then reloads
+// the page. Also sets a 'benos_reset' localStorage flag first, so if the reload lands before the
+// IndexedDB deletion finishes, boot() still knows to start fresh rather than trying to load leftover
+// data (see getResetFlag/FS.load). Every step is independently try/caught since a reset should never
+// itself get stuck partway through — it always finishes and reloads regardless of which storage
+// layer(s) are actually available in this browsing context.
 async function doFactoryReset(){
   const ov=el('div'); ov.style.cssText='position:fixed;inset:0;z-index:9500;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:-apple-system,sans-serif;animation:fadeIn .3s ease';
   ov.innerHTML='<div style="font-size:60px;margin-bottom:24px;animation:spinPulse 1.4s ease-in-out infinite"></div><div style="font-size:16px;letter-spacing:1px;color:#ccc">Restoring factory settings…</div>';
@@ -3048,6 +3629,11 @@ async function doFactoryReset(){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENSTUDIO (advanced HTML code editor)               */
 /* ===================================================================== */
+// buildStudiosApp : a lightweight HTML IDE for writing the user-authored .html "apps" that
+// launchHTMLApp() later runs sandboxed. Combines a syntax-highlighted code editor (a transparent
+// <textarea> layered exactly on top of a highlighted <pre>, a common from-scratch editor trick — see
+// the editor setup below), live HTML validation, and a live iframe preview that only updates once the
+// markup passes validation, so the preview never shows a broken half-typed state.
 function buildStudiosApp(win, openNode){
   win.appName='BenStudio';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -3091,6 +3677,9 @@ function buildStudiosApp(win, openNode){
   ta.value=startCode;
 
   // HTML syntax highlighter ------------------------------------------------
+  // highlight : a small regex-based HTML syntax highlighter (not a real parser — good enough for
+  // colorizing typical hand-written markup). Escapes the raw text first so it's safe to render as
+  // HTML, then wraps comments, tag names, and attribute name/value pairs each in their own colored span.
   function highlight(code){
     let s=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     // comments
@@ -3103,6 +3692,9 @@ function buildStudiosApp(win, openNode){
     });
     return s;
   }
+  // syncHL : re-renders the highlighted <pre> layer beneath the (invisible-text) textarea to match
+  // its current content, and regenerates the line-number gutter to match the new line count. Called
+  // on every keystroke, so the highlight overlay always tracks exactly what's being typed.
   function syncHL(){
     hl.innerHTML=highlight(ta.value)+'\n';
     const lines=ta.value.split('\n').length;
@@ -3110,6 +3702,10 @@ function buildStudiosApp(win, openNode){
     gutter.textContent=g;
   }
   // error detection (basic HTML validation) --------------------------------
+  // checkErrors : a lightweight structural validator — walks every tag with a stack (classic
+  // matching-parentheses approach) to catch unclosed and stray-closing tags, skipping void elements
+  // (br, img, meta, ...) that never need a closing tag. Not a full HTML parser, but enough to catch
+  // the most common mistakes and gate whether the live preview is safe/sensible to show.
   function checkErrors(){
     const code=ta.value; const errs=[];
     const lines=code.split('\n');
@@ -3131,16 +3727,24 @@ function buildStudiosApp(win, openNode){
     renderErrors(errs);
     return errs;
   }
+  // renderErrors : lists validation errors (capped at 30) in the bottom error panel, or a green
+  // checkmark when there are none.
   function renderErrors(errs){
     if(!errs.length){ errBox.innerHTML='<span style="color:#5af78e">✓ No problems detected</span>'; return; }
     errBox.innerHTML=errs.slice(0,30).map(e=>'<div style="color:#f48771;padding:1px 0">⚠ Line '+e.line+': '+e.msg+'</div>').join('');
   }
   // preview -----------------------------------------------------------------
+  // doPreview : pushes the current code into the preview iframe via srcdoc (a full reload of the
+  // sandboxed preview document — simple and reliable, though it does reset any preview-page state).
   function doPreview(){
     preview.srcdoc=ta.value;
     stat.textContent='Previewed'; stat.style.color='#5af78e';
   }
   let debounce=null;
+  // onChange : runs on every keystroke — re-highlights immediately (cheap), then debounces the more
+  // expensive validation + preview refresh by 450ms so a burst of fast typing doesn't re-validate and
+  // re-render the iframe on every single keystroke. The preview only actually updates when
+  // checkErrors() comes back clean; otherwise the status line explains the preview is paused and why.
   function onChange(){
     syncHL();
     stat.textContent='Editing…'; stat.style.color='#e2b340';
@@ -3159,6 +3763,9 @@ function buildStudiosApp(win, openNode){
     if(e.key==='Tab'){ e.preventDefault(); const s=ta.selectionStart,en=ta.selectionEnd; ta.value=ta.value.slice(0,s)+'  '+ta.value.slice(en); ta.selectionStart=ta.selectionEnd=s+2; onChange(); }
     if((e.metaKey||e.ctrlKey)&&e.key==='s'){ e.preventDefault(); saveFile(); }
   });
+  // saveFile : overwrites the currently-open file in place if there is one (curFile), otherwise
+  // prompts with the shared filePicker in 'save' mode to create a new file in Documents — after which
+  // that new file becomes "the currently open file" for subsequent saves (Ctrl/Cmd+S).
   async function saveFile(){
     const name=fileName||'untitled.html';
     if(curFile && FS.get(curFile)){
@@ -3184,6 +3791,10 @@ function buildStudiosApp(win, openNode){
     else if(a==='save'){ saveFile(); }
     else if(a==='saveapp'){ saveAsApp(); }
   }));
+  // saveAsApp : the key feature that turns BenStudio from a plain text editor into an app builder —
+  // saves the current markup as a node explicitly typed 'app'/kind 'app' inside Applications, which
+  // is exactly the shape launchHTMLApp() (and the desktop/dock icon system) expects for a runnable
+  // sandboxed mini-app. Offers to jump straight to Applications or run it immediately afterward.
   function saveAsApp(){
     filePicker({mode:'save',title:'Save as App',filter:['.html'],defName:(fileName||'MyApp').replace(/\.html?$/i,'')+'.html',startFolder:'applications',onSelect:async r=>{
       const appName = /\.html?$/i.test(r.name)?r.name:r.name+'.html';
@@ -3199,17 +3810,25 @@ function buildStudiosApp(win, openNode){
       ]});
     }});
   }
+  // openPicker : loads an existing .html file from the FS into the editor, replacing curFile/fileName
+  // so subsequent saves go back to that same file.
   function openPicker(){
     filePicker({mode:'open',title:'Open HTML File',filter:['.html'],onSelect:n=>{
       if(n){ ta.value=n.content||''; curFile=n.id; fileName=n.name; nameEl.textContent=fileName; onChange(); }
     }});
   }
+  // initial render: highlight/validate/preview the starting code as soon as the editor opens.
   syncHL(); checkErrors(); doPreview();
 }
 
 /* ===================================================================== */
-/* PREINSTALLED APP — BENPEN                                             */
+/* PREINSTALLED APP — BENVIEWER (image viewer)                            */
 /* ===================================================================== */
+// buildImageViewerApp : a pan-and-zoom image viewer (mouse wheel to zoom toward the cursor, click-drag
+// to pan). `n` is the FS node to open immediately if provided; otherwise the viewer opens empty and
+// the toolbar's Open button lets the user pick an image via the shared filePicker. On load, the image
+// is auto-scaled to fit the viewport (never upscaled past 100%, via the Math.min(...,1) below) so
+// large images start fully visible instead of overflowing the window.
 function buildImageViewerApp(win, n){
   win.appName='BenViewer';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -3235,10 +3854,16 @@ function buildImageViewerApp(win, n){
     '<span id="bz-info" style="color:#888"></span>';
   root.appendChild(container);
   root.appendChild(toolbar);
+  // update : applies the current pan/zoom state to the image element's CSS transform and refreshes
+  // the zoom-percentage label — called after any change to scale/offX/offY.
   function update(){
     imgEl.style.transform='translate('+offX+'px,'+offY+'px) scale('+scale+')';
     $('#bz-zoom',root).textContent=Math.round(scale*100)+'%';
   }
+  // zoomTo : changes the zoom level while keeping the point under (cx,cy) — the mouse cursor during a
+  // wheel-zoom, or the viewport center for button-triggered zooms — visually fixed in place, the same
+  // "zoom toward the cursor" behavior as a real image viewer or map. Achieved by scaling the pan
+  // offset by the same ratio the zoom itself changed by.
   function zoomTo(s, cx, cy){
     const r=container.getBoundingClientRect();
     const mx=cx||r.width/2, my=cy||r.height/2;
@@ -3306,6 +3931,13 @@ function buildImageViewerApp(win, n){
   }
 }
 
+/* ===================================================================== */
+/* PREINSTALLED APP — BENPEN (raster drawing/paint app)                   */
+/* ===================================================================== */
+// buildPenApp : a MS Paint-style raster drawing app built on a single <canvas>. Owns its own
+// pixel-level undo/redo stack (snapshots of canvas.toDataURL(), see the history logic further down)
+// since canvas drawing has no native undo, plus tool selection (pencil/eraser/shapes/etc.), color
+// picker, and brush size — each tool's pointer-drag behavior is wired individually below.
 function buildPenApp(win){
   win.appName='BenPen';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -3374,12 +4006,18 @@ function buildPenApp(win){
   ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
   saveState();
 
+  // saveState : pushes a full snapshot of the canvas (as a data URL) onto the undo stack — the
+  // simplest possible undo implementation for canvas drawing, at the cost of some memory (capped at
+  // maxUndo snapshots, oldest dropped first). Any new action after an undo clears the redo stack,
+  // matching standard undo/redo semantics (you can't redo past a fresh edit).
   function saveState(){
     const data=canvas.toDataURL();
     undoStack.push(data);
     if(undoStack.length>maxUndo)undoStack.shift();
     redoStack=[];
   }
+  // undo/redo : move one snapshot between the two stacks and redraw the canvas from it. undo() keeps
+  // at least one state on undoStack (length<2 check) so there's always a "current" state to redraw from.
   function undo(){
     if(undoStack.length<2)return;
     redoStack.push(undoStack.pop());
@@ -3393,11 +4031,18 @@ function buildPenApp(win){
     img.src=undoStack[undoStack.length-1];
   }
 
+  // getPos : converts a mouse event's page coordinates into canvas pixel coordinates, accounting for
+  // the canvas possibly being displayed at a different CSS size than its actual pixel dimensions
+  // (W/H), and clamps to stay within the canvas bounds so drawing never goes "off the edge" internally.
   function getPos(e){
     const r=canvas.getBoundingClientRect();
     return {x:Math.max(0,Math.min(W-1,(e.clientX-r.left)*(W/r.width))),y:Math.max(0,Math.min(H-1,(e.clientY-r.top)*(H/r.height)))};
   }
 
+  // startDraw : mousedown handler — fill and color-picker tools act immediately on a single click
+  // (no drag needed), while freehand tools (pencil/brush/eraser) begin a new path to be extended by
+  // moveDraw. Shape tools (rect/ellipse/etc.) just set drawing=true here; their actual shape is drawn
+  // live on the overlay canvas as the mouse moves (see moveDraw/drawShape) and committed on mouseup.
   function startDraw(e){
     const p=getPos(e); lastX=p.x; lastY=p.y;
     if(tool==='fill'){ floodFill(Math.round(p.x),Math.round(p.y),color); saveState(); return; }
@@ -3407,6 +4052,12 @@ function buildPenApp(win){
       ctx.beginPath(); ctx.moveTo(p.x,p.y);
     }
   }
+  // drawShape : traces the outline for whichever shape tool is active into the given 2D context
+  // (called against the overlay context for the live drag-preview, and against the real canvas
+  // context to commit the final shape on mouseup) between the drag start (x1,y1) and current point
+  // (x2,y2), then strokes/fills it as requested. Each shape branch computes its own path points from
+  // the bounding box (lx/ly/rx/ry) and center (cx/cy) of the drag rectangle — polygons (hexagon,
+  // star, pentagon) are generated by walking evenly-spaced angles around that center.
   function drawShape(ctx2,x1,y1,x2,y2,fill,stroke){
     ctx2.beginPath();
     const lx=Math.min(x1,x2), ly=Math.min(y1,y2), rx=Math.abs(x2-x1), ry=Math.abs(y2-y1);
@@ -3435,6 +4086,11 @@ function buildPenApp(win){
     if(stroke)ctx2.stroke();
     if(fill&&tool!=='line'&&tool!=='arrow'){ ctx2.fillStyle=fillColor; ctx2.fill(); }
   }
+  // moveDraw : mousemove handler while drawing=true. Freehand tools draw incrementally straight onto
+  // the real canvas (extending the current path segment by segment). Shape tools instead redraw their
+  // preview from scratch on the separate transparent `overlay` canvas on every move — clearing and
+  // re-tracing the whole shape each time — so the in-progress shape can be seen and adjusted live
+  // without permanently committing pixels to the real canvas until the drag ends.
   function moveDraw(e){
     if(!drawing)return;
     const p=getPos(e);
@@ -3448,6 +4104,9 @@ function buildPenApp(win){
       drawShape(oCtx,lastX,lastY,p.x,p.y,true,true);
     }
   }
+  // endDraw : mouseup/mouseleave handler — clears the overlay preview and, for shape tools, draws the
+  // final shape for real onto the main canvas at its last position. Every completed stroke/shape ends
+  // with saveState() so it becomes a new undo checkpoint.
   function endDraw(e){
     if(!drawing)return;
     drawing=false;
@@ -3459,12 +4118,18 @@ function buildPenApp(win){
     saveState();
   }
 
+  // pickColor : the eyedropper tool — reads the single pixel under the cursor via getImageData and
+  // sets it as the active foreground color.
   function pickColor(p){
     const d=ctx.getImageData(Math.round(p.x),Math.round(p.y),1,1).data;
     const hex='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
     color=hex; $('#pen-color',root).value=hex;
   }
 
+  // floodFill : classic iterative (stack-based, to avoid recursion depth limits on large fills)
+  // flood-fill/"bucket" tool — starting at (sx,sy), repaints every 4-connected pixel that matches the
+  // clicked pixel's original color to the new fill color, tracking visited pixels with a flat
+  // Uint8Array (one byte per pixel) sized to the whole canvas for fast lookups.
   function floodFill(sx,sy,fillHex){
     const imgData=ctx.getImageData(0,0,W,H);
     const data=imgData.data;
@@ -3486,11 +4151,15 @@ function buildPenApp(win){
     }
     ctx.putImageData(imgData,0,0);
   }
+  // hexToRgb : "#rrggbb" -> [r,g,b] byte values, used by floodFill to compare against raw canvas pixel data.
   function hexToRgb(h){
     const v=parseInt(h.replace('#',''),16);
     return [(v>>16)&255,(v>>8)&255,v&255];
   }
 
+  // applyStyle : syncs both drawing contexts' stroke color/width/cap/join to the current tool
+  // settings before each stroke starts — the eraser is implemented as just stroking in white rather
+  // than a true "erase to transparent," since this canvas is always opaque (painted white at setup).
   function applyStyle(){
     if(tool==='eraser'){ ctx.strokeStyle='#ffffff'; ctx.lineWidth=size; ctx.globalCompositeOperation='source-over'; }
     else{ ctx.strokeStyle=color; ctx.lineWidth=size; ctx.globalCompositeOperation='source-over'; }
@@ -3523,6 +4192,10 @@ function buildPenApp(win){
   const fileBtn=$('#pen-filebtn',root), fileMenu=$('#pen-filemenu',root);
   fileBtn.onclick=win.guard(e=>{ e.stopPropagation(); fileMenu.style.display=fileMenu.style.display==='block'?'none':'block'; });
   document.addEventListener('click',()=>{ fileMenu.style.display='none'; },{capture:true});
+  // File menu actions (Save/Save As/Open): the drawing is exported as a PNG data URL on demand
+  // (canvas.toDataURL) — there's no separate "document format", the saved file's content IS the PNG.
+  // Save reuses curFile if one is already associated with this window (from a prior save or an
+  // opened file); otherwise, like Save As, it always prompts via filePicker for a destination.
   $$('.fp-item',root).forEach(b=>b.onclick=win.guard(()=>{
     fileMenu.style.display='none';
     const a=b.dataset.fp;
@@ -3563,6 +4236,8 @@ function buildPenApp(win){
     }
   }));
 
+  // Undo/Redo/Clear toolbar buttons — Clear is destructive enough to warrant a confirmation dialog
+  // (unlike undo/redo, which are trivially reversible via the redo/undo stack).
   $$('[data-a]',root).forEach(b=>b.onclick=win.guard(()=>{
     const a=b.dataset.a;
     if(a==='undo')undo();
