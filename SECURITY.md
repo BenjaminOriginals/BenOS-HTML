@@ -1,12 +1,15 @@
 # Security Policy
 
+Benjamin Originals takes the security of BenOS HTML Edition seriously. We appreciate your efforts to responsibly disclose your findings and help us keep the platform safe.
+
 ## Supported Versions
+
+Currently, security updates and patches are only provided for the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
 | Beta1   | :white_check_mark: |
-| Beta0.1 | :x:                |
-| Sierra  | :x:                |
+| Beta0.1 | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
@@ -28,3 +31,12 @@ your account safe.
   you very secure on the platform, but if your password is on another platform that
   is not managed by Benjamin Originals or secured by BenOS Connect protocol, we
   have no control over keeping it safe, which could put your account at risk.
+* **Step 3:** Beware of phishing and impersonation. Benjamin Originals and the
+  BenOS team will **never** ask for your passcode or credentials via email,
+  direct message, or third-party platforms.
+* **Step 4:** Keep your browser and host device up to date. Security vulnerabilities
+  in your underlying operating system or web browser can compromise your experience,
+  even on secure platforms. 
+* **Step 5:** Always log out on shared devices. If you are accessing BenOS HTML Edition
+  on a public, school, or shared computer, ensure you fully sign out of your session when
+  finished.
