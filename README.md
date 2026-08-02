@@ -31,9 +31,9 @@ To make BenOS as portable as possible, the entire OS lives inside a single HTML/
 | ----------- | ------- | --------------- |
 | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 51 00 PM" src="https://github.com/user-attachments/assets/3b8ceb5f-97c3-41ef-8cc6-b1844566be72" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 51 53 PM" src="https://github.com/user-attachments/assets/d9d24397-ceb0-440c-90e8-ee054cadae12" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 54 50 PM" src="https://github.com/user-attachments/assets/314b7fdf-2dcc-4181-828e-b0f02ce1cb46" /> |
 
-| User Settings | Files App |
-| ------------- | --------- |
-| <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 57 33 PM" src="https://github.com/user-attachments/assets/fc1130d8-7d3a-42a7-b0b3-70edc0757d3a" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 1 03 45 PM" src="https://github.com/user-attachments/assets/9875545b-fff0-4db7-a55a-42212faaff2d" /> |
+| BenMusic | User Settings | Files App |
+| -------- | ------------- | --------- |
+| <img width="1440" height="812" alt="Screenshot 2026-08-02 at 1 39 07 PM" src="https://github.com/user-attachments/assets/f55130ab-75e3-4505-b78c-8cb02d29e2ed" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 57 33 PM" src="https://github.com/user-attachments/assets/fc1130d8-7d3a-42a7-b0b3-70edc0757d3a" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 1 03 45 PM" src="https://github.com/user-attachments/assets/9875545b-fff0-4db7-a55a-42212faaff2d" /> |
 
 ## Extra info
 BenOS HTML Edition does not interact with, modify, or provide the security guarantees of your host operating system (macOS, Windows, Linux, etc.). Because storage relies on browser-based systems like IndexedDB and localStorage, clearing your browser data or cache may result in the permanent loss of virtual files and user configurations. Please back up any important files or data. Original build (Sierra) by @DedeProGames-official.
