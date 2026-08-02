@@ -10,6 +10,19 @@ The HTML edition of BenOS! Performs very well and operates fully on HTML and can
 | BenPen | Make simple art and handwritten notes natively in BenOS HTML Edition. Save, open, edit, and export projects any time! |
 | BenViewer | View images and videos natively in BenOS HTML Edition. |
 
-(JS description coming soon)
+## Installation & Usage
+When you install BenOS HTML Edition, make sure to set up your account in the Account section of the Settings app. Set up your name, add a password (optional), and add a hint (optional).
+
+Clone the repository:
+
+Bash
+git clone https://github.com/BenjaminOriginals/BenOS-HTML.git
+Run the OS:
+Simply open the BenOS HTML Edition V1 (Beta).html file in any modern web browser.
+
+Note for persistent storage: For the IndexedDB file system to save your data permanently, it is highly recommended to serve the file over a local HTTP server (e.g., VS Code Live Server, Python's http.server) rather than opening it directly via the file:// protocol.
+
+## Technical Architecture
+To make BenOS as portable as possible, the entire OS lives inside a single HTML/JS configuration. The file system relies heavily on async JavaScript, using Promises to manage IndexedDB transactions. For security, apps launch inside their own sandboxed iframes (using allow-scripts and allow-forms). We also built a custom crash bridge listener, so if one app goes down, it won’t crash the whole OS.
 
 Original build (Sierra) by DedeProGames.
