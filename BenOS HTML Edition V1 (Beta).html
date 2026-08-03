@@ -2659,7 +2659,7 @@ function buildBrowserApp(win){
     if(/^about:/i.test(value)) return value;
     if(/^https?:\/\//i.test(value)) return value;
     if(/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
-    if(/^[\w-]+(?:\.[\w-]+)+(?:\/|$)/.test(value)) return 'https://'+value;
+    if(/^[\w.-]+(?:\.[\w.-]+)+(?:\/|$)/.test(value)) return 'https://'+value;
     return 'https://html.duckduckgo.com/html/?q='+encodeURIComponent(value);
   }
   function go(input){
