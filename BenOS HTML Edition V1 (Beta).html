@@ -3201,15 +3201,6 @@ function buildStudiosApp(win, openNode){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENPEN                                             */
 /* ===================================================================== */
-function safeImageSrcFromContent(content){
-  if(typeof content!=='string') return '';
-  const s=content.trim();
-  // Allow only base64-encoded data URLs for common raster image types.
-  // Explicitly excludes SVG to avoid scriptable image payload risks.
-  const safeDataImage=/^data:image\/(?:png|jpeg|jpg|gif|webp|bmp|x-icon|vnd\.microsoft\.icon);base64,[a-z0-9+/=\s]+$/i;
-  return safeDataImage.test(s) ? s : '';
-}
-
 function buildImageViewerApp(win, n){
   win.appName='BenViewer';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -3301,13 +3292,8 @@ function buildImageViewerApp(win, n){
       scale=s; offX=0; offY=0; update();
       $('#bz-info',root).textContent=img.naturalWidth+'×'+img.naturalHeight+' px';
     };
-    const safeSrc=safeImageSrcFromContent(n.content);
-    if(!safeSrc){
-      notify('Blocked', 'Unsupported or unsafe image source', '⚠️');
-      return;
-    }
-    img.src=safeSrc;
-    imgEl.src=safeSrc;
+    img.src=n.content;
+    imgEl.src=n.content;
   }
 }
 
