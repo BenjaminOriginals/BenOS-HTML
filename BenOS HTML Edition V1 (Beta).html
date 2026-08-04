@@ -457,7 +457,7 @@ function applyWallpaperToElement(el,value){
 }
 const BENOS = {
   version:"1.0",
-  build:"1.0 Beta Ver 2026-06-15",
+  build:"1.0 Beta2",
   user:"BenOS User 1",
   logo:"https://yt3.googleusercontent.com/-znaq5oM9pnqWOLOXj4ATespUfmaGw9sYsVrwssVLpFrqg-Eo66obj-9C0rhAdPYhPDp3xFF=s160-c-k-c0x00ffffff-no-rj",
   defaultWallpaper:'linear-gradient(135deg, #0f2b4c 0%, #1c5f9d 50%, #67d7ff 100%)',
@@ -994,7 +994,7 @@ function iconHTML(node,size){
   if(node.systemApp && SYSTEM_APPS[node.systemApp]){
     return '<div class="ico app '+node.systemApp+'" style="'+st+'border-radius:'+Math.round(size*0.23)+'px"></div>';
   }
-  if(node.type==='folder') return '<div class="ico folder" style="'+st+'">📁</div>';
+  if(node.type==='folder') return '<div class="ico folder" style="'+st+'"></div>';
   if(node.kind==='image' && typeof node.content==='string' && node.content.startsWith('data:image'))
     return '<div class="ico image" style="'+st+'background-image:url('+node.content+')"></div>';
   const map={txt:'📄',image:'🖼',audio:'🎵',video:'🎬',pdf:'📕',zip:'🗜',app:'📦',generic:'📄'};
@@ -1220,11 +1220,16 @@ function getUsers(){
     avatar:x.avatar||'👤'
   }));
 }
+function setActiveUserName(name){
+  const next=(name||'').trim()||'BenOS User 1';
+  BENOS.user=next;
+  return next;
+}
 function needsLogin(){
   const u=getUsers();
   return u.length>1 || u.some(x=>x.pass && x.pass.length>0);
 }
-function autoLogin(){ BENOS.user=getUsers()[0].name; startDesktop(); }
+function autoLogin(){ setActiveUserName(getUsers()[0].name); startDesktop(); }
 
 let loginUserIdx=0;
 function showLogin(){
@@ -1259,7 +1264,7 @@ function wireLogin(users){
   $$('.upick').forEach(e=>e.onclick=()=>{ loginUserIdx=+e.dataset.i; refresh(); pass.focus(); });
   const attempt=()=>{
     const cur=users[loginUserIdx];
-    if(pass.value===(cur.pass||'')){ BENOS.user=cur.name; doLoginSuccess(); }
+    if(pass.value===(cur.pass||'')){ setActiveUserName(cur.name); doLoginSuccess(); }
     else{ const pnl=$('#login .panel'); pnl.classList.add('shake'); setTimeout(()=>pnl.classList.remove('shake'),450); pass.value=''; }
   };
   $('#login-go').onclick=attempt;
@@ -2470,19 +2475,21 @@ function buildSettingsApp(win){
       users.map((u,i)=>'<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eee">'+
         '<div style="font-size:28px">'+(u.avatar||'👤')+'</div>'+
         '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+(u.name===BENOS.user?' <span style="font-size:11px;color:#888;font-weight:400">(current)</span>':'')+'</div>'+
-        '<div style="font-size:11px;color:#999">'+(u.pass?'🔒 Password protected':'No password')+' · '+(u.hint?'💡 Hint set':'No hint')+'</div></div>'+
+        '<div style="font-size:11px;color:#999">'+(u.pass?'Password protected':'No password')+' · '+(u.hint?'Hint set':'No hint')+'</div></div>'+
+        '<button class="tbtn" data-name="'+i+'">Rename</button>'+
         '<button class="tbtn" data-pw="'+i+'">'+(u.pass?'Change':'Set')+' Password</button>'+ 
         '<button class="tbtn" data-hint="'+i+'">'+(u.hint?'Edit':'Set')+' Hint</button>'+ 
         (u.pass?'<button class="tbtn" data-clr="'+i+'">Remove Password</button>':'')+
         (users.length>1?'<button class="tbtn" data-del="'+i+'">Delete</button>':'')+
       '</div>').join(''))
       +card('Add User','<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="nu-name" placeholder="User name" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-pass" placeholder="Password (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-hint" placeholder="Password hint (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><button class="tbtn" id="nu-add">Add User</button></div>')
-      +card('Login Behaviour','<div style="font-size:12px;color:#666;line-height:1.7">The login screen appears only when a password is set <b>or</b> more than one user exists. With a single password-free user, BenOS logs in automatically on boot.<br>Current state: <b>'+(needsLogin()?'Login required at startup':'Auto-login enabled')+'</b></div>');
+      +card('Login Behavior','<div style="font-size:12px;color:#666;line-height:1.7">The login screen appears only when a password is set <b>or</b> more than one user exists. With a single password-free user, BenOS logs in automatically on boot.<br>Current state: <b>'+(needsLogin()?'Login required at startup':'Auto-login enabled')+'</b></div>');
+    $$('[data-name]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.name; promptText('Rename User','Enter a new username for '+users[i].name+':',users[i].name,false, async v=>{ const next=(v||'').trim(); if(!next)return; const dup=users.some((u,j)=>j!==i && u.name.toLowerCase()===next.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const oldName=users[i].name; users[i].name=next; if(BENOS.user===oldName) setActiveUserName(next); await commit(); notify('Username updated',next,'👤'); }); }));
     $$('[data-pw]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.pw; promptText('Set Password','Enter a new password for '+users[i].name+':','',true, async v=>{ users[i].pass=v||''; await commit(); notify('Password updated',users[i].name,'🔒'); }); }));
     $$('[data-hint]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.hint; promptText('Set Password Hint','Enter a password hint for '+users[i].name+':',users[i].hint||'', false, async v=>{ users[i].hint=v||''; await commit(); notify('Hint saved',users[i].name,'💡'); }); }));
     $$('[data-clr]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.clr; users[i].pass=''; await commit(); }));
-    $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users.length<=1)return; const nm=users[i].name; users.splice(i,1); await commit(); notify('User removed',nm,'👤'); }));
-    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
+    $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users.length<=1)return; const nm=users[i].name; const wasCurrent=users[i].name===BENOS.user; users.splice(i,1); if(wasCurrent) setActiveUserName(users[0]?users[0].name:'BenOS User 1'); await commit(); notify('User removed',nm,'👤'); }));
+    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const dup=users.some(u=>u.name.toLowerCase()===nm.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
   }
   function renderStorage(){
     const s=FS.stats(); const total=512*1048576; const pct=Math.min(100,(s.bytes/total)*100);
@@ -2620,9 +2627,12 @@ function buildBrowserApp(win){
   }));
 
   let tabs=[], activeTab=0, tabSeq=0;
+  let currentAddress='about:start';
+  let currentSiteName='Start';
+
   function startPage(){
     return '<!DOCTYPE html><html><head><meta charset=utf-8><style>@keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}body{font-family:-apple-system,sans-serif;margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#eef3fb,#dfe7f5);color:#333}h1{font-size:46px;margin-bottom:6px;background:linear-gradient(90deg,#4285f4,#34a853,#fbbc05,#ea4335);-webkit-background-clip:text;background-clip:text;color:transparent;animation:fu .5s ease}p{color:#888;margin-bottom:24px;animation:fu .5s ease .1s both}.search-row{display:flex;align-items:center;gap:10px;width:100%;max-width:540px;margin-bottom:22px;animation:fu .45s ease .1s both}.search-input{flex:1;padding:14px 16px;border-radius:18px;border:1px solid rgba(0,0,0,.14);font-size:15px;outline:none;}.search-btn{padding:13px 20px;border-radius:18px;background:linear-gradient(135deg,#34a853,#2db84d);color:#fff;font-weight:700;cursor:pointer;border:none;transition:transform .18s ease,box-shadow .18s ease;box-shadow:0 12px 24px rgba(45,184,77,.22);}.search-btn:hover{transform:translateY(-1px);box-shadow:0 16px 28px rgba(45,184,77,.26)}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:560px}.t{background:#fff;border-radius:12px;padding:16px 10px;text-align:center;text-decoration:none;color:#444;box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:13px;transition:transform .18s,box-shadow .18s;animation:fu .45s ease both}.t:hover{transform:translateY(-4px) scale(1.04);box-shadow:0 8px 22px rgba(0,0,0,.16)}.t b{display:block;font-size:26px;margin-bottom:6px}</style></head><body><h1>BenBrowser</h1><p>Your gateway to the web inside BenOS</p><div class=search-row><input id="bb-search" class="search-input" placeholder="Search the web" autocomplete="off"><button id="bb-search-btn" class="search-btn">Search</button></div><div class=g>'+
-    [['🔍','Search','https://html.duckduckgo.com/html/?q=BenBrowser'],['📖','Wikipedia','https://www.wikipedia.org'],['🎨','Scratch','https://scratch.mit.edu'],['🌐','Example','https://example.com'],['🐙','GitHub','https://github.com'],['📚','MDN','https://developer.mozilla.org'],['⤓','Test Download','#download']].map((t,i)=>'<a class=t style="animation-delay:'+(i*0.05)+'s" href="'+t[2]+'" data-benbrowser="'+esc(t[2])+'" target="_self"><b>'+t[0]+'</b>'+t[1]+'</a>').join('')+
+    [['🔍','Search','https://start.duckduckgo.com/'],['📖','Wikipedia','https://www.wikipedia.org'],['🎨','Scratch','https://scratch.mit.edu'],['🌐','Example','https://example.com'],['🐙','GitHub','https://github.com'],['📚','MDN','https://developer.mozilla.org'],['⤓','Test Download','#download']].map((t,i)=>'<a class=t style="animation-delay:'+(i*0.05)+'s" href="'+t[2]+'" data-benbrowser="'+esc(t[2])+'" target="_self"><b>'+t[0]+'</b>'+t[1]+'</a>').join('')+
     '</div><script>const searchInput=document.getElementById("bb-search");const searchBtn=document.getElementById("bb-search-btn");const searchGo=()=>{const q=searchInput.value.trim()||"BenBrowser";window.parent.postMessage({__benos:true,type:"browser-navigate",url:"https://html.duckduckgo.com/html/?q="+encodeURIComponent(q)},"*");};searchBtn.addEventListener("click",searchGo);searchInput.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();searchGo();}});document.querySelectorAll("a[data-benbrowser]").forEach(a=>{a.addEventListener("click",e=>{e.preventDefault();const url=a.getAttribute("data-benbrowser");window.parent.postMessage({__benos:true,type:"browser-navigate",url},"*");});});<\/script><\/body><\/html>';
   }
   function newTab(url){
@@ -2659,14 +2669,18 @@ function buildBrowserApp(win){
     if(/^about:/i.test(value)) return value;
     if(/^https?:\/\//i.test(value)) return value;
     if(/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
-    if(/^[\w.-]+(?:\.[\w.-]+)+(?:\/|$)/.test(value)) return 'https://'+value;
-    return 'https://html.duckduckgo.com/html/?q='+encodeURIComponent(value);
+    if(/^[\w-]+(?:\.[\w-]+)+(?:\/|$)/.test(value)) return 'https://'+value;
+    return 'https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&hps=1&start=1&q='+encodeURIComponent(value);
   }
   function go(input){
-    const t=cur(); let url=normalizeBrowserUrl(input);
+    const t=cur();
+    const rawValue=String(input||'').trim();
+    const url=normalizeBrowserUrl(rawValue);
+    currentAddress=url;
+    currentSiteName=(url==='about:start'?'Start':(url==='#download'?'Downloads':url.replace(/^https?:\/\//,'').split('/')[0]||'Page'));
     if(url==='#download'){ doTestDownload(); return; }
     if(url==='about:start'){ loadStart(t); return; }
-    t.url=url; omni.value=url; t.title=url.replace(/^https?:\/\//,'').split('/')[0];
+    t.url=url; omni.value=url; t.title=currentSiteName;
     renderTabs();
     startLoad();
     t.frame.removeAttribute('srcdoc'); t.blocked=false;
@@ -2709,7 +2723,14 @@ function buildBrowserApp(win){
     else if(a==='ext'){ if(t.url&&t.url!=='about:start'){ window.open(t.url,'_blank','noopener'); notify('Opened externally',t.url,'↗'); } else playSound('alert'); }
     else if(a==='dl'){ launchSystemApp('files','downloads'); }
   }));
-  omni.addEventListener('keydown',win.guard(e=>{ if(e.key==='Enter'&&omni.value.trim())go(omni.value); }));
+  omni.addEventListener('keydown',win.guard(e=>{
+    if(e.key==='Enter'&&omni.value.trim()){
+      const typed=omni.value.trim();
+      currentAddress=normalizeBrowserUrl(typed);
+      currentSiteName=(currentAddress==='about:start'?'Start':(currentAddress==='#download'?'Downloads':currentAddress.replace(/^https?:\/\//,'').split('/')[0]||'Page'));
+      go(typed);
+    }
+  }));
   newTab();
 }
 /* Download handler used by the browser — saves into Downloads/ permanently */
@@ -2728,14 +2749,17 @@ function buildMusicApp(win, autoplayNode){
   win.appName='BenMusic';
   const root=el('div','flexcol'); win.body.appendChild(root);
   root.style.background='#fafafa';
-  // build the library: metadata tracks (from GitHub) + imported FS audio + a synth demo
+  // build the library from the actual audio files shipped with BenOS
   function library(){
-    const list=[];
-    (META.manifest.musics||[]).forEach(f=>{ list.push({name:f.name.replace(/\.\w+$/,''),artist:'BenOS Music',art:'#6943ff',metaKey:assetKey('musics',f.name),src:null}); });
-    [...FS.nodes.values()].filter(n=>n.kind==='audio'&&typeof n.content==='string'&&n.content.startsWith('data:'))
-      .forEach(n=>list.push({name:n.name.replace(/\.\w+$/,''),src:n.content,artist:'Imported',art:null}));
-    list.push({name:'BenOS Theme',artist:'System Sounds',src:null,art:'#fc2c55',demo:true});
-    return list;
+    return [
+      {name:'Cool Beat 808', artist:'', art:'#6943ff', src:'./Cool Beat 808.mp3'},
+      {name:'BenOS Theme', artist:'', art:'#fc2c55', src:'./BenOS Theme.wav'},
+      {name:'The Ghost', artist:'', art:'#5e5ce6', src:'./The Ghost.wav'},
+      {name:'Gotta Be Sus 2026', artist:'', art:'#34c759', src:'./Gotta be Sus 2026.wav'},
+      {name:'Gotta Be Sus Remastered', artist:'', art:'#ff9500', src:'./Gotta be Sus Remastered.wav'},
+      {name:'Gummy Bears', artist:'', art:'#ff375f', src:'./Gummy Bears.wav'},
+      {name:'Behind the Mountains', artist:'', art:'#0a84ff', src:'./Behind the Mountains.wav'}
+    ];
   }
   let tracks=library(), idx=0, playing=false, repeat=false;
   const audio=new Audio(); Audio$.register(audio);
@@ -2771,7 +2795,7 @@ function buildMusicApp(win, autoplayNode){
   function renderList(){
     tracks=library();
     listEl.innerHTML='<div style="font-size:20px;font-weight:700;padding:18px 18px 8px">Songs</div>'+
-      tracks.map((t,i)=>'<div class="mrow" data-i="'+i+'" style="display:flex;align-items:center;gap:12px;padding:9px 18px;border-bottom:1px solid #f0f0f0;font-size:13px'+(i===idx?';background:#ffe9ef':'')+'"><div style="width:30px;height:30px;border-radius:6px;background:'+(t.art||'linear-gradient(160deg,#8e8e93,#636366)')+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">'+(i===idx&&playing?'♫':'🎵')+'</div><div style="flex:1"><div style="font-weight:600">'+esc(t.name)+'</div><div style="font-size:11px;color:#999">'+esc(t.artist)+'</div></div></div>').join('');
+      tracks.map((t,i)=>'<div class="mrow" data-i="'+i+'" style="display:flex;align-items:center;gap:12px;padding:9px 18px;border-bottom:1px solid #f0f0f0;font-size:13px'+(i===idx?';background:#ffe9ef':'')+'"><div style="width:30px;height:30px;border-radius:6px;background:'+(t.art||'linear-gradient(160deg,#8e8e93,#636366)')+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">'+(i===idx&&playing?'♫':'🎵')+'</div><div style="flex:1"><div style="font-weight:600">'+esc(t.name)+'</div>'+(t.artist?'<div style="font-size:11px;color:#999">'+esc(t.artist)+'</div>':'')+'</div></div>').join('');
     $$('.mrow',listEl).forEach(r=>r.ondblclick=win.guard(()=>{ idx=+r.dataset.i; play(); }));
     $$('.mrow',listEl).forEach(r=>r.onclick=()=>{ idx=+r.dataset.i; });
   }
@@ -2916,7 +2940,7 @@ window.addEventListener('load',()=>{
   runBoot().catch(e=>benFatal(e.message||String(e)));
 });
 /* ===================================================================== */
-/* WI-FI PANEL — English, BenConnect, live ping every 5s                   */
+/* WI-FI PANEL — English, BenOS Connect, live ping every 5s                   */
 /* ===================================================================== */
 let _wifiTimer=null;
 function openWifiPanel(){
@@ -2924,8 +2948,8 @@ function openWifiPanel(){
   if(p.style.display==='block'){ closeWifiPanel(); return; }
   p.innerHTML=
     '<div class="wt"><span class="wbars"><i style="height:5px;animation-delay:0s"></i><i style="height:8px;animation-delay:.15s"></i><i style="height:11px;animation-delay:.3s"></i><i style="height:14px;animation-delay:.45s"></i></span> Wi-Fi</div>'+
-    '<div class="wsub">Secure connection via BenConnect</div>'+
-    '<div class="wrow"><span>Network</span><b>BenConnect</b></div>'+
+    '<div class="wsub">Secure connection via BenOS Connect</div>'+
+    '<div class="wrow"><span>Network</span><b>Private connection</b></div>'+
     '<div class="wrow"><span>Status</span><b><span class="wdot"></span><span id="wifi-status">Online</span></b></div>'+
     '<div class="wrow" style="border-bottom:none"><span>Ping</span><b id="wifi-ping">measuring…</b></div>';
   p.style.display='block';
@@ -3201,6 +3225,14 @@ function buildStudiosApp(win, openNode){
 /* ===================================================================== */
 /* PREINSTALLED APP — BENPEN                                             */
 /* ===================================================================== */
+function safeImageSrcFromContent(content){
+  if(typeof content!=='string') return '';
+  const s=content.trim();
+  // Allow only base64-encoded data URLs for common raster image types.
+  // Explicitly excludes SVG to avoid scriptable image payload risks.
+  const safeDataImage=/^data:image\/(?:png|jpeg|jpg|gif|webp|bmp|x-icon|vnd\.microsoft\.icon);base64,[a-z0-9+/=\s]+$/i;
+  return safeDataImage.test(s) ? s : '';
+}
 function buildImageViewerApp(win, n){
   win.appName='BenViewer';
   const root=el('div','flexcol'); win.body.appendChild(root);
@@ -3292,6 +3324,8 @@ function buildImageViewerApp(win, n){
       scale=s; offX=0; offY=0; update();
       $('#bz-info',root).textContent=img.naturalWidth+'×'+img.naturalHeight+' px';
     };
+    const safeSrc=safeImageSrcFromContent(n.content); imgEl.src=n.content; if(!safeSrc){
+    otify('Blocked', 'Unsupported or unsafe image source', '⚠️'); return; } img.src=safeSrc; imgEl.src=safeSrc;
     img.src=n.content;
     imgEl.src=n.content;
   }
