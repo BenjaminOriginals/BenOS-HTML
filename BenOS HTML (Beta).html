@@ -236,6 +236,49 @@ p,.dialog p,.toast .tb,.nc-item .tb,.nc-item .tm,.mb-item,.mb-stat,.ctx-menu,.de
 .nc-clear{align-self:center;margin-top:10px;font-size:12px;background:rgba(255,255,255,.16);padding:6px 16px;border-radius:14px;cursor:pointer;color:#fff;}
 
 /* ===================================================================== */
+/* BENAI VISUALS                                                         */
+/* ===================================================================== */
+/* --- BenAI Component Styles --- */
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+input:checked + .slider { background-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(20px); }
+
+#benai-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); z-index: 9999; display: none; align-items: center; justify-content: center; }
+#benai-panel { width: 600px; height: 400px; background: #fff; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+#benai-header { padding: 15px 20px; background: linear-gradient(135deg, #2f7cf6, #8e2de2); color: white; display: flex; justify-content: space-between; align-items: center; font-family: "Orbitron", sans-serif; }
+#benai-content { flex: 1; padding: 20px; font-size: 14px; color: #555; display: flex; flex-direction: column; justify-content: flex-end; }
+#benai-input-area { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+#benai-input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; outline: none; user-select: text; }
+#benai-send { padding: 10px 20px; background: var(--accent); color: white; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; }
+
+/* Bottom-Right Floating Trigger Button */
+#benai-trigger-btn {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2f7cf6, #8e2de2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+  cursor: pointer;
+  z-index: 5000;
+  border: 2px solid rgba(255,255,255,0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+#benai-trigger-btn:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.35); }
+
+/* ===================================================================== */
 /* SPOTLIGHT                                                               */
 /* ===================================================================== */
 #spotlight{position:fixed;inset:0;z-index:7200;display:none;align-items:flex-start;justify-content:center;padding-top:16vh;background:rgba(0,0,0,.18);}
@@ -344,7 +387,15 @@ p,.dialog p,.toast .tb,.nc-item .tb,.nc-item .tm,.mb-item,.mb-stat,.ctx-menu,.de
 .tbtn.icon{padding:5px 9px;font-size:14px;}
 
 /* Brightness dimmer overlay (sits above wallpaper, below UI; never blocks input) */
-#brightness-overlay{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:5900;transition:opacity .2s ease;}
+#brightness-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2147483647; /* Maximum possible 32-bit integer z-index */
+  transition: opacity .2s ease;
+}
 
 /* Control Center */
 #control-center{position:fixed;top:30px;right:14px;width:300px;z-index:7300;display:none;
@@ -423,7 +474,7 @@ p,.dialog p,.toast .tb,.nc-item .tb,.nc-item .tm,.mb-item,.mb-stat,.ctx-menu,.de
 <div id="toast-layer"></div>
 <div id="notif-center"><h2>Notifications</h2><div id="notif-list"></div><div class="nc-clear" id="nc-clear">Clear All</div></div>
 <div id="wifi-panel"></div>
-<div id="spotlight"><div id="spot-box"><input id="spot-input" placeholder="Search" spellcheck="false"><div id="spot-results"></div></div></div>
+<div id="spotlight"><div id="spot-box"><input id="spot-input" placeholder="Search anything..." spellcheck="false"><div id="spot-results"></div></div></div>
 <div id="fatal">
   <h1>BenOS Crashed</h1>
   <div>Error:</div>
@@ -435,7 +486,7 @@ p,.dialog p,.toast .tb,.nc-item .tb,.nc-item .tm,.mb-item,.mb-stat,.ctx-menu,.de
 <script>
 "use strict";
 const BENOS_VERSION = "1.0";
-const BENOS_BUILD = "1.0 Beta3";
+const BENOS_BUILD = "1.0 Beta4";
 /* ===================================================================== */
 /* SYSTEM CORE — globals, utilities                                        */
 /* ===================================================================== */
@@ -1034,19 +1085,18 @@ async function runBoot(){
 }
 
 /* ===================================================================== */
-/* METADATA DOWNLOAD SYSTEM                                                */
-/* Downloads BenOS system files from the GitHub metadata repository.       */
-/* Directory inside the repo is the BenOS version, e.g. /HTML-1.0/             */
-/* Repo: https://github.com/BenjaminOriginals/BenOS-HTML           */
+/* METADATA DOWNLOAD SYSTEM                                              */
+/* Downloads BenOS system files from the GitHub metadata repository      */
+/* Directory inside the repo is the BenOS version, e.g. /HTML-1.0/       */
+/* Repo: https://github.com/BenjaminOriginals/BenOS-HTML                 */
 /* ===================================================================== */
 const META_REPO = 'BenjaminOriginals/BenOS-HTML';
-const META_VER = 'HTML-1.0';
 /* live metadata state: file listings per directory + loaded system sounds */
 const META = { branch:'main', manifest:{backgrounds:[],sounds:[],musics:[]}, sounds:{}, musicReady:false, online:false };
 function getResetFlag(){ try{return window.localStorage.getItem('benos_reset')==='1';}catch(e){return false;} }
 function clearResetFlag(){ try{ window.localStorage.removeItem('benos_reset'); }catch(e){} }
 function resetBenOSRuntimeDefaults(){ BENOS.volume=0.8; BENOS.muted=false; META.sounds={}; META.musicReady=false; }
-function metaApi(dir){ return 'https://api.github.com/repos/'+META_REPO+'/contents/'+META_VER+'/'+dir+'?ref='+META.branch; }
+function metaApi(dir){ return 'https://api.github.com/repos/'+META_REPO+'/'+dir+'?ref='+META.branch; }
 function setBootStatus(txt){ /* boot is text-free */ }
 function assetKey(dir,name){ return 'asset:'+dir+':'+name; }
 function blobToDataURL(blob){ return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(blob);}); }
@@ -1242,7 +1292,7 @@ function showLogin(){
   resolveWallpaper(FS.getMeta('wallpaper',null)).then(url=>{ applyWallpaperToElement(lg, url); }).catch(()=>{ applyWallpaperToElement(lg, BENOS.fallbackWallpaper); });
   lg.style.display='flex'; lg.style.opacity='1';
   const panel=$('#login .panel');
-  const pwrow='<div class="pwrow"><input id="login-pass" type="password" placeholder="Enter Password" autocomplete="off"><div class="go" id="login-go">→</div></div><div class="hint" id="login-hint"></div><button type="button" class="recover" id="login-recover">Forgot password?</button>';
+  const pwrow='<div class="pwrow"><input id="login-pass" type="password" placeholder="Enter Password" autocomplete="off"><div class="go" id="login-go">→</div></div><div class="hint" id="login-hint"></div><button type="button" class="recover" id="login-recover">Password Hint</button><div style="margin-top:16px;width:100%;max-width:260px;text-align:center;border-top:1px solid rgba(255,255,255,0.15);padding-top:12px;"><div style="font-size:11px;color:rgba(255,255,255,0.65);line-height:1.4;margin-bottom:8px;">Unable to get in? Restore BenOS.<br><span style="color:#ff8b8b;font-size:10px;">WARNING: Permanently erases all data and files saved previously. Resets to factory settings.</span></div><button class="tbtn" style="background:rgba(192,57,43,0.25);border:1px solid rgba(231,76,60,0.5);color:#ff7676;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background=\'rgba(192,57,43,0.45)\'" onmouseout="this.style.background=\'rgba(192,57,43,0.25)\'" onclick="if(confirm(\'⚠️ PERMANENT RESET WARNING:\\n\\nAre you sure you want to perform a factory reset? All local files, users, and settings will be deleted forever.\')){ factoryReset(); }">⚠️ Permanent Factory Reset ⚠️</button></div>';
   if(users.length>1){
     panel.innerHTML='<div class="userpick">'+users.map((u,i)=>'<div class="upick'+(i===0?' sel':'')+'" data-i="'+i+'"><div class="uav">'+(u.avatar||'👤')+'</div><div class="un">'+esc(u.name)+'</div></div>').join('')+'</div>'+pwrow;
   }else{
@@ -1258,7 +1308,7 @@ function wireLogin(users){
     if($('#login-avatar'))$('#login-avatar').textContent=cur.avatar||'👤';
     if($('#login-uname'))$('#login-uname').textContent=cur.name;
     pass.placeholder=cur.pass?'Enter Password':'Press Enter to log in';
-    if($('#login-hint'))$('#login-hint').textContent=cur.pass?'Need help? Click Forgot password.':'No password set — just press Enter';
+    if($('#login-hint'))$('#login-hint').textContent=cur.pass?'Need help?':'No password set — just press Enter';
     pass.value='';
     $$('.upick').forEach((e,i)=>e.classList.toggle('sel',i===loginUserIdx));
   };
@@ -1466,7 +1516,7 @@ const WM = {
   byApp(systemApp){ return [...WM.windows.values()].filter(w=>w.systemApp===systemApp); },
 };
 /* ===================================================================== */
-/* DESKTOP — startup, wallpaper, menu bar, clock                          */
+/* DESKTOP — startup, wallpaper, menu bar, clock, BenAI                  */
 /* ===================================================================== */
 function startDesktop(){
   applyWallpaper();
@@ -1594,6 +1644,9 @@ function startClock(){
   };
   upd(); setInterval(upd,1000);
 }
+
+/* ---- BenAI ---- */
+
 
 /* ===================================================================== */
 /* DESKTOP ICONS — render, position persist, drag, select                 */
@@ -2508,7 +2561,6 @@ function buildSettingsApp(win){
       '<div style="font-size:13px;line-height:2"><div><b>BenOS</b></div>'+
       '<div>Version: '+BENOS.version+'</div><div>Build: '+BENOS.build+'</div><div>User: '+BENOS.user+'</div>'+
       '<div>Resolution: '+(screen.width||window.innerWidth||1920)+' × '+(screen.height||window.innerHeight||1080)+'</div>'+
-      '<div>Browser: '+navigator.userAgent.split(') ')[0].split('(').pop()+'</div>'+
       '<div>Storage engine: '+(DB.mode==='idb'?'IndexedDB':(DB.mode==='local'?'localStorage':'In-memory'))+'</div></div>')
       +card('System Files (Metadata)', (function(){
         const md=FS.getMeta('systemMetadata',null);
@@ -2516,10 +2568,10 @@ function buildSettingsApp(win){
           const n=Object.keys(md.files).length;
           return '<div style="font-size:13px;line-height:1.9"><div>Source: <b>github.com/'+esc('BenjaminOriginals/BenOS-HTML')+'</b></div><div>Directory: <b>/'+esc(md.version)+'/</b></div><div>Branch: <b>'+esc(md.branch)+'</b></div><div>Files downloaded: <b>'+n+'</b></div><div>Fetched: <b>'+fmtDate(md.fetchedAt)+'</b></div></div>';
         }
-        return '<div style="font-size:13px;color:#888;line-height:1.7">No metadata was downloaded this session. BenOS booted from local data (the metadata repository was offline or empty). System files are fetched from <b>github.com/BenjaminOriginals/BenOS-HTML</b> at <b>/'+esc(BENOS.version)+'/</b> on boot.</div>';
+        return '<div style="font-size:13px;color:#888;line-height:1.7">Metadata only downloaded from Google Cloud servers this session. BenOS booted from local data (except for wallpapers and icons, which were fetched from the cloud). Everything else is fetched from <b>github.com/BenjaminOriginals/BenOS-HTML</b> on boot.</div>';
       })())
       +card('Power','<div style="display:flex;gap:8px"><button class="tbtn" onclick="confirmAction(\'Restart BenOS?\',restartOS)">Restart</button><button class="tbtn" onclick="confirmAction(\'Shut down?\',shutdownOS)">Shut Down</button><button class="tbtn" onclick="confirmAction(\'Log out?\',logOut)">Log Out</button></div>')
-      +card('Reset','<div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:10px">Restore BenOS to factory settings. This permanently erases all files, settings, users and installed apps.</div><button class="tbtn" style="background:#ffeaea;border-color:#f3b6b6;color:#c0392b" onclick="factoryReset()">⚠️ Restore Factory Settings</button>');
+      +card('Reset','<div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:10px">Restore BenOS to factory settings. This permanently erases all files, settings, users and installed apps.</div><button class="tbtn" style="background:#ffeaea;border-color:#f3b6b6;color:#c0392b" onclick="factoryReset()">⚠️ Permanent Factory Reset ⚠️</button>');
   }
   renderNav(); renderBody();
 }
@@ -3013,9 +3065,9 @@ function refreshControlCenter(){
     ? '<div class="cc-np"><div class="art">'+(NowPlaying.playing?'♫':'🎵')+'</div><div class="meta"><div class="t">'+esc(NowPlaying.title)+'</div><div class="a">'+esc(NowPlaying.artist||'')+'</div></div><div class="ctrl" id="cc-play">'+(NowPlaying.playing?'⏸':'▶')+'</div></div>'
     : '<div style="display:flex;align-items:center;gap:11px"><div class="art" style="background:#c7c7cc">🎵</div><div class="meta"><div class="t" style="color:#888">Not Playing</div><div class="a">Open BenMusic to play</div></div></div>';
   cc.innerHTML=
-    '<div class="cc-card"><div class="cc-label">🔊 Sound</div><div class="cc-slider"><span class="ic">'+(vol===0?'🔇':'🔈')+'</span><input type="range" id="cc-vol" min="0" max="100" value="'+vol+'"></div></div>'+
-    '<div class="cc-card"><div class="cc-label">☀️ Display Brightness</div><div class="cc-slider"><span class="ic">🔅</span><input type="range" id="cc-bright" min="20" max="100" value="'+bright+'"><span class="ic">🔆</span></div></div>'+
-    '<div class="cc-card"><div class="cc-label">🎵 Now Playing</div>'+np+'</div>';
+    '<div class="cc-card"><div class="cc-label">Sound</div><div class="cc-slider"><span class="ic">'+(vol===0?'🔇':'🔈')+'</span><input type="range" id="cc-vol" min="0" max="100" value="'+vol+'"></div></div>'+
+    '<div class="cc-card"><div class="cc-label">Display Brightness</div><div class="cc-slider"><span class="ic">🔅</span><input type="range" id="cc-bright" min="20" max="100" value="'+bright+'"><span class="ic">🔆</span></div></div>'+
+    '<div class="cc-card"><div class="cc-label">Now Playing</div>'+np+'</div>';
   $('#cc-vol',cc).oninput=e=>{ Audio$.setVolume(e.target.value/100); refreshControlCenter(); };
   $('#cc-vol',cc).onchange=()=>playSound('change');
   $('#cc-bright',cc).oninput=async e=>{ await FS.setMeta('brightness',e.target.value/100); applyBrightness(); };
@@ -3032,7 +3084,7 @@ document.addEventListener('mousedown',e=>{
 /* ===================================================================== */
 function factoryReset(){
   showDialog({
-    icon:'⚠️', title:'Restore Factory Settings',
+    icon:'⚠️', title:'Permanent Factory Reset',
     body:'This will permanently erase all files, settings, users and apps, returning BenOS to its original state. This cannot be undone.\n\nAre you sure?',
     buttons:[
       {label:'Cancel'},
@@ -3613,5 +3665,26 @@ function buildPenApp(win){
 }
 
 </script>
+
+/* ===================================================================== */
+/* BENAI INTEGRATION                                                     */
+/* ===================================================================== */
+<!-- BenAI Overlay Component -->
+<div id="benai-overlay">
+  <div id="benai-panel">
+    <div id="benai-header">
+      <span>BenAI</span>
+      <span style="font-size: 12px; cursor: pointer;" onclick="toggleBenAI()">ESC</span>
+    </div>
+    <div id="benai-content">
+      <p>Hello. How can BenAI assist you?</p>
+    </div>
+    <div id="benai-input-area">
+      <input type="text" id="benai-input" placeholder="Ask BenAI...">
+      <button id="benai-send">Send</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

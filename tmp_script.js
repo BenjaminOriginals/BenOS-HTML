@@ -1833,8 +1833,26 @@ function buildSettingsApp(win){
         }
         return '<div style="font-size:13px;color:#888;line-height:1.7">No metadata was downloaded this session. BenOS booted from local data (the metadata repository was offline or empty). System files are fetched from <b>github.com/BenjaminOriginals/BenOS-HTML</b> at <b>/'+esc(BENOS.version)+'/</b> on boot.</div>';
       })())
+      +card('BenAI Integration',
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">'+
+    '<span>Enable BenAI floating button and shortcuts</span>'+
+    '<label class="switch">'+
+    '<input type="checkbox" id="sys-benai-toggle" '+(FS.getMeta('benaiEnabled', true)?'checked':'')+'>'+
+    '<span class="slider"></span>'+
+    '</label></div>')
       +card('Power','<div style="display:flex;gap:8px"><button class="tbtn" onclick="confirmAction(\'Restart BenOS?\',restartOS)">Restart</button><button class="tbtn" onclick="confirmAction(\'Shut down?\',shutdownOS)">Shut Down</button><button class="tbtn" onclick="confirmAction(\'Log out?\',logOut)">Log Out</button></div>')
       +card('Reset','<div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:10px">Restore BenOS to factory settings. This permanently erases all files, settings, users and installed apps.</div><button class="tbtn" style="background:#ffeaea;border-color:#f3b6b6;color:#c0392b" onclick="factoryReset()">⚠️ Restore Factory Settings</button>');
+  }
+  const toggleEl = $('#sys-benai-toggle', body);
+  if(toggleEl){
+    toggleEl.onchange = win.guard(async e => {
+      const val = e.target.checked;
+      await FS.setMeta('benaiEnabled', val);
+      // Automatically show/hide the floating button based on toggle state
+      const btn = document.getElementById('benai-trigger-btn');
+      if(btn) btn.style.display = val ? 'flex' : 'none';
+      notify('BenAI Settings', val ? 'BenAI enabled' : 'BenAI disabled', '✦');
+    });
   }
   renderNav(); renderBody();
 }
