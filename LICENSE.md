@@ -8,7 +8,7 @@
 
 ## 1. Ownership & Proprietary Rights
 
-The Software, including all source code, design assets, conceptual frameworks, and documentation comprising **BenOS HTML Edition**, is the exclusive intellectual property of **Benjamin Originals**. 
+The Software, including all source code, design assets, conceptual frameworks, and documentation comprising **BenOS HTML** also previously known as **BenOS HTML Edition**, is the exclusive intellectual property of **Benjamin Originals** under BenOS. 
 
 Ownership remains entirely with the parent company and its founder. This license does not grant any right, title, or interest in or to the Software except as expressly set forth herein.
 
