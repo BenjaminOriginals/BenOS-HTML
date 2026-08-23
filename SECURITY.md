@@ -6,11 +6,11 @@ Benjamin Originals takes the security of BenOS HTML Edition seriously. We apprec
 
 Currently, security updates and patches are only provided for the following versions:
 
-| Version  | Supported          |
-| -------- | ------------------ |
-| V1 Beta1 | :white_check_mark: |
-| Beta1    | :white_check_mark: |
-| Beta0.1  | :x: |
+| Version    | Supported          |
+| ---------- | ------------------ |
+| V1 Beta    | :white_check_mark: |
+| V0.1 Beta  | :white_check_mark: |
+| Beta0.1    | :x: |
 
 ## Reporting a Vulnerability
 
