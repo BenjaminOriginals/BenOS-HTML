@@ -30,7 +30,7 @@ To make BenOS as lightweight as possible, the entire OS lives inside a single HT
 ## Screenshots
 | Lock Screen | Desktop | Desktop w/ Apps |
 | ----------- | ------- | --------------- |
-| <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 51 00 PM" src="https://github.com/user-attachments/assets/3b8ceb5f-97c3-41ef-8cc6-b1844566be72" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 51 53 PM" src="https://github.com/user-attachments/assets/d9d24397-ceb0-440c-90e8-ee054cadae12" /> | <img width="1440" height="812" alt="Screenshot 2026-08-02 at 12 54 50 PM" src="https://github.com/user-attachments/assets/314b7fdf-2dcc-4181-828e-b0f02ce1cb46" /> |
+| <img width="1440" height="812" alt="Screenshot 2026-08-23 at 11 53 47 AM" src="https://github.com/user-attachments/assets/d7b9fdd3-0bab-4f94-ad6d-136ad4539d8b" /> | <img width="1440" height="812" alt="Screenshot 2026-08-23 at 11 54 05 AM" src="https://github.com/user-attachments/assets/0a827869-6ab6-4b17-b2dc-50e1e8813ddd" /> | <img width="1440" height="812" alt="Screenshot 2026-08-23 at 11 55 52 AM" src="https://github.com/user-attachments/assets/3c09c3f8-556f-4c0b-bfe9-5f4be6216679" /> |
 
 | BenMusic | User Settings | Files App |
 | -------- | ------------- | --------- |
