@@ -9,7 +9,7 @@ Currently, security updates and patches are only provided for the following vers
 | Version    | Supported          |
 | ---------- | ------------------ |
 | V1 Beta    | :white_check_mark: |
-| V0.1 Beta  | :white_check_mark: |
+| V0.1 Beta  | :x: |
 | Beta0.1    | :x: |
 
 ## Reporting a Vulnerability
