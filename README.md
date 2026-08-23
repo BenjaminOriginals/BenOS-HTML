@@ -1,5 +1,5 @@
 # BenOS-HTML
-The HTML edition of BenOS! Performs very well and operates fully on HTML and can be run in any browser that supports it. Has multiple useful apps, built for everyday productivity. Here is a list of a few:
+BenOS HTML is a high-performance, browser-based OS for productivity and creation running in any modern browser on a very light installation file (zip downloadable here). Built on HTML and JavaScript, BenOS HTML offers an intuitive file manager, exclusive music on BenMusic, an HTML editor with live preview in the BenStudio app, and amazing customization in Settings. Here is a list of the apps pre-installed on BenOS HTML:
 | App | Function |
 |-----|----------|
 | BenBrowser | A fast, secure, and private browser built for your workflow, seamlessly integrated into the BenOS ecosystem. |
@@ -13,11 +13,14 @@ The HTML edition of BenOS! Performs very well and operates fully on HTML and can
 ## Installation & Usage
 When you install BenOS HTML, make sure to set up your account in the Settings app's Account section. Set up your name, add a password (optional), and add a hint (optional).
 
-#### 1. Download release files:
-Find the latest release, click on it, and download the attached files (may look like this: BenOS HTML _version name/number_.html
+#### 1. Download files:
+Click on the green 'Code' button at the top of the repository, and click 'Download ZIP'
 
-#### 2. Run the OS:
-Open the BenOS HTML file in any modern web browser.
+#### 2. Set up BenOS HTML
+Extract the files from the ZIP, then open the folder and double-click on the HTML file (may look like: **BenOS HTML _version_.html**)
+
+#### 3. Run the OS:
+When the HTML file is opened in your browser, open settings and set up your user account. Then, you're all set to have fun using BenOS HTML!
 
 *Note for persistent storage:* For the IndexedDB file system to save your data permanently, it is highly recommended to serve the file over a local HTTP server (e.g., VS Code Live Server, Python's http.server) rather than opening it directly via the _file://_ protocol.
 
