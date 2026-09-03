@@ -10,6 +10,9 @@
   an in-memory store so BenOS always boots. The public interface
   (put/del/get/all on the 'fs' and 'meta' stores) is identical in every mode.
 */
+// Put these at the top of your script section
+// Put these at the top of your script section
+
 const DB = {
   name:'BenOS HTML Edition', version:2, db:null,
   mode:'memory',                       // 'idb' | 'local' | 'memory'
@@ -1790,23 +1793,32 @@ function buildSettingsApp(win){
   function renderUsers(){
     const users=JSON.parse(JSON.stringify(getUsers()));
     async function commit(){ await FS.setMeta('users',users); renderUsers(); }
+    const canEditCurrentUser = u => u.name === BENOS.user;
     body.innerHTML=card('User Accounts',
-      users.map((u,i)=>'<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eee">'+
-        '<div style="font-size:28px">'+(u.avatar||'👤')+'</div>'+
-        '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+(u.name===BENOS.user?' <span style="font-size:11px;color:#888;font-weight:400">(current)</span>':'')+'</div>'+
-        '<div style="font-size:11px;color:#999">'+(u.pass?'🔒 Password protected':'No password')+' · '+(u.hint?'💡 Hint set':'No hint')+'</div></div>'+
-        '<button class="tbtn" data-pw="'+i+'">'+(u.pass?'Change':'Set')+' Password</button>'+ 
-        '<button class="tbtn" data-hint="'+i+'">'+(u.hint?'Edit':'Set')+' Hint</button>'+ 
-        (u.pass?'<button class="tbtn" data-clr="'+i+'">Remove Password</button>':'')+
-        (users.length>1?'<button class="tbtn" data-del="'+i+'">Delete</button>':'')+
-      '</div>').join(''))
+      users.map((u,i)=>{
+        const self = canEditCurrentUser(u);
+        const actions = self ? (
+          '<button class="tbtn" data-pw="'+i+'">'+(u.pass?'Change':'Set')+' Password</button>'+ 
+          '<button class="tbtn" data-hint="'+i+'">'+(u.hint?'Edit':'Set')+' Hint</button>'+ 
+          (u.pass?'<button class="tbtn" data-clr="'+i+'">Remove Password</button>':'')+
+          (users.length>1?'<button class="tbtn" data-del="'+i+'">Delete</button>':'')
+        ) : '<span style="font-size:11px;color:#999;white-space:nowrap">Locked</span>';
+        return '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eee">'+
+          '<div style="font-size:28px">'+(u.avatar||'👤')+'</div>'+
+          '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+(u.name===BENOS.user?' <span style="font-size:11px;color:#888;font-weight:400">(current)</span>':'')+'</div>'+
+          '<div style="font-size:11px;color:#999">'+(u.pass?'🔒 Password protected':'No password')+' · '+(u.hint?'💡 Hint set':'No hint')+'</div></div>'+
+          (self?'<button class="tbtn" data-name="'+i+'">Rename</button>':'')+
+          actions+
+        '</div>';
+      }).join(''))
       +card('Add User','<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="nu-name" placeholder="User name" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-pass" placeholder="Password (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-hint" placeholder="Password hint (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><button class="tbtn" id="nu-add">Add User</button></div>')
       +card('Login Behaviour','<div style="font-size:12px;color:#666;line-height:1.7">The login screen appears only when a password is set <b>or</b> more than one user exists. With a single password-free user, BenOS logs in automatically on boot.<br>Current state: <b>'+(needsLogin()?'Login required at startup':'Auto-login enabled')+'</b></div>');
-    $$('[data-pw]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.pw; promptText('Set Password','Enter a new password for '+users[i].name+':','',true, async v=>{ users[i].pass=v||''; await commit(); notify('Password updated',users[i].name,'🔒'); }); }));
-    $$('[data-hint]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.hint; promptText('Set Password Hint','Enter a password hint for '+users[i].name+':',users[i].hint||'', false, async v=>{ users[i].hint=v||''; await commit(); notify('Hint saved',users[i].name,'💡'); }); }));
-    $$('[data-clr]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.clr; users[i].pass=''; await commit(); }));
-    $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users.length<=1)return; const nm=users[i].name; users.splice(i,1); await commit(); notify('User removed',nm,'👤'); }));
-    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
+    $$('[data-name]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.name; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can edit this account.',buttons:[{label:'Close',primary:true}]}); return; } promptText('Rename User','Enter a new username for '+users[i].name+':',users[i].name,false, async v=>{ const next=(v||'').trim(); if(!next)return; const dup=users.some((u,j)=>j!==i && u.name.toLowerCase()===next.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const oldName=users[i].name; users[i].name=next; if(BENOS.user===oldName) setActiveUserName(next); await commit(); notify('Username updated',next,'👤'); }); }));
+    $$('[data-pw]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.pw; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can change this password.',buttons:[{label:'Close',primary:true}]}); return; } promptText('Set Password','Enter a new password for '+users[i].name+':','',true, async v=>{ users[i].pass=v||''; await commit(); notify('Password updated',users[i].name,'🔒'); }); }));
+    $$('[data-hint]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.hint; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can edit this password hint.',buttons:[{label:'Close',primary:true}]}); return; } promptText('Set Password Hint','Enter a password hint for '+users[i].name+':',users[i].hint||'', false, async v=>{ users[i].hint=v||''; await commit(); notify('Hint saved',users[i].name,'💡'); }); }));
+    $$('[data-clr]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.clr; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can remove this password.',buttons:[{label:'Close',primary:true}]}); return; } users[i].pass=''; await commit(); }));
+    $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can delete this account.',buttons:[{label:'Close',primary:true}]}); return; } if(users.length<=1)return; const nm=users[i].name; const wasCurrent=users[i].name===BENOS.user; users.splice(i,1); if(wasCurrent) setActiveUserName(users[0]?users[0].name:'BenOS User 1'); await commit(); notify('User removed',nm,'👤'); }));
+    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const dup=users.some(u=>u.name.toLowerCase()===nm.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
   }
   function renderStorage(){
     const s=FS.stats(); const total=512*1048576; const pct=Math.min(100,(s.bytes/total)*100);
