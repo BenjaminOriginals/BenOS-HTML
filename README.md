@@ -40,5 +40,14 @@ To make BenOS as lightweight as possible, the entire OS lives inside a single HT
 | --------- | --------- |
 | <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 31 34 PM" src="https://github.com/user-attachments/assets/6f30382d-e48e-45ea-9aa2-c69189f937b7" /> | <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 35 38 PM" src="https://github.com/user-attachments/assets/f2dc7010-bfbc-47f6-b0b5-8e9668b1aa4d" /> |
 
+## For Businesses
+In BenOS HTML, you can enable Demo Mode to show off devices with an ultra-high-performance, lightweight OS. You can present it on any device, to anyone! The best part is, BenOS HTML has BenOS Connect fused into the software, so no matter what users try to do, they cannot mess with your own BenOS HTML stuff, only the stuff that needs to be shown off. All you have to do is create an account to host the demo and follow these steps:
+### Activating Demo Mode
+Under Settings > Users, you can turn on the Demo Mode toggle, which will instantly activate the demo. Anyone who comes up to the device will be restricted to only the demo.
+### Deactivating Demo Mode
+Under Settings > Users, turn off the Demo Mode toggle. You will have to enter your admin password in order for it to be disabled, so do not worry about users attempting this. BenOS HTML has strict protocols preventing Demo Mode from being disabled by anyone not authorized to do so.
+### What does Demo Mode do?
+Demo Mode restricts users' capabilities. First of all, users will only be allowed to access BenBrowser, BenMusic, BenPen, and Settings. This prevents them from messing with your files or using the terminal to do bad stuff. This will also prevent users from clearing notifications, shutting down BenOS, logging out of the current Demo Mode user, or deleting important things. Demo Mode also locks certain sensitive settings, like modifying the name, password, or password hint of the Demo User and keeps your account safe and secure while it is in the hands of others during Demo Mode.
+
 ## Extra info
 BenOS HTML does not interact with, modify, or provide the security guarantees of your host operating system (macOS, Windows, Linux, etc.). Because storage relies on browser-based systems like IndexedDB and localStorage, clearing your browser data or cache may result in the permanent loss of virtual files and user configurations. Please back up any important files or data. Original build (Sierra) by @DedeProGames-official.
