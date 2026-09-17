@@ -263,6 +263,7 @@ const FS = {
     await FS.setMeta('wallpaper',null);
     await FS.setMeta('dockSize',52);
     await FS.setMeta('dockMag',true);
+    await FS.setMeta('catEnabled',false);
     await FS.setMeta('brightness',1);
     await FS.setMeta('volume',0.8);
     await FS.setMeta('muted',false);
@@ -539,13 +540,30 @@ function simulateBoot(bar){
 /* user accounts (stored in the file system metadata) */
 function getUsers(){
   const u=FS.getMeta('users',null);
-  if(!u || !u.length) return [{name:'BenOS User 1', pass:'', hint:'', avatar:'👤'}];
+  if(!u || !u.length) return [{name:'BenOS User 1', pass:'', hint:'', avatar:'👤', demo:false}];
   return u.map(x=>({
     name:x.name||'BenOS User 1',
     pass:x.pass||'',
     hint:x.hint||'',
-    avatar:x.avatar||'👤'
+    avatar:x.avatar||'👤',
+    demo:!!x.demo
   }));
+}
+function getCurrentUser(){
+  const users=getUsers();
+  return users.find(u=>u.name===BENOS.user) || users[0] || {name:'BenOS User 1', pass:'', hint:'', avatar:'👤', demo:false};
+}
+function isDemoModeActive(){
+  return !!getCurrentUser().demo;
+}
+function isDemoAllowedApp(key){
+  return ['files','browser','settings'].includes(key||'');
+}
+function applyDemoModeState(){
+  const enabled = isDemoModeActive();
+  BENOS.demoMode = !!enabled;
+  if(document.body) document.body.classList.toggle('demo-mode', BENOS.demoMode);
+  return BENOS.demoMode;
 }
 function needsLogin(){
   const u=getUsers();
@@ -555,12 +573,11 @@ function autoLogin(){ BENOS.user=getUsers()[0].name; startDesktop(); }
 
 let loginUserIdx=0;
 function showLogin(){
+  applyDarkModeState();
   const users=getUsers();
   loginUserIdx=0;
   const lg=$('#login');
-  applyWallpaperToElement(lg, BENOS.defaultWallpaper || BENOS.fallbackWallpaper);
-  resolveWallpaper(FS.getMeta('wallpaper',null)).then(url=>{ applyWallpaperToElement(lg, url); }).catch(()=>{ applyWallpaperToElement(lg, BENOS.fallbackWallpaper); });
-  lg.style.display='flex'; lg.style.opacity='1';
+  if(!lg) return;
   const panel=$('#login .panel');
   const pwrow='<div class="pwrow"><input id="login-pass" type="password" placeholder="Enter Password" autocomplete="off"><div class="go" id="login-go">→</div></div><div class="hint" id="login-hint"></div><button type="button" class="recover" id="login-recover">Forgot password?</button>';
   if(users.length>1){
@@ -569,14 +586,40 @@ function showLogin(){
     const u=users[0];
     panel.innerHTML='<div class="avatar" id="login-avatar">'+(u.avatar||'👤')+'</div><div class="uname" id="login-uname">'+esc(u.name)+'</div>'+pwrow;
   }
+  setLoginWallpaper((users[0] && users[0].wallpaper) || null, false);
+  lg.style.display='flex'; lg.style.opacity='1';
   wireLogin(users);
+}
+async function setLoginWallpaper(value, animate=true){
+  const lg=$('#login'); if(!lg) return;
+  const a=$('#login-wall-a'); const b=$('#login-wall-b'); if(!a || !b){
+    const resolved = await resolveWallpaper(value || null);
+    applyWallpaperToElement(lg, resolved);
+    return;
+  }
+  const next = a.classList.contains('active') ? b : a;
+  const prev = next === a ? b : a;
+  const resolved = await resolveWallpaper(value || null);
+  applyWallpaperToElement(next, resolved);
+  next.classList.add('active');
+  if(animate){
+    prev.style.opacity='0';
+    next.style.opacity='1';
+    setTimeout(()=>{ prev.classList.remove('active'); prev.style.opacity='0'; },700);
+  }else{
+    prev.style.opacity='0';
+    next.style.opacity='1';
+    prev.classList.remove('active');
+    next.classList.add('active');
+  }
 }
 function wireLogin(users){
   const pass=$('#login-pass');
-  const refresh=()=>{
+  const refresh=async()=>{
     const cur=users[loginUserIdx];
     if($('#login-avatar'))$('#login-avatar').textContent=cur.avatar||'👤';
     if($('#login-uname'))$('#login-uname').textContent=cur.name;
+    await setLoginWallpaper(cur && (cur.wallpaper || null) ? cur.wallpaper : null, true);
     pass.placeholder=cur.pass?'Enter Password':'Press Enter to log in';
     if($('#login-hint'))$('#login-hint').textContent=cur.pass?'Need help? Click Forgot password.':'No password set — just press Enter';
     pass.value='';
@@ -766,7 +809,7 @@ const WM = {
       win.el.style.height=window.innerHeight+'px';
       if(maxBtn){ maxBtn.innerHTML=WIN_ICONS.restore; maxBtn.title='Restore'; }
       $('#dock-wrap').classList.add('dock-hide');
-      $('#menubar').classList.add('mbar-hide');
+      $('#menubar').classList.remove('mbar-hide');
     }
   },
   close(win,silent){
@@ -776,6 +819,9 @@ const WM = {
     setTimeout(()=>{ win.el.remove(); },280);
     WM.windows.delete(win.id);
     if(WM.focused===win){ WM.focused=null; WM._focusNext(); }
+    $('#dock-wrap').classList.remove('dock-hide');
+    $('#menubar').classList.remove('mbar-hide');
+    closeDatePanel();
     refreshMenuApp(); updateDockRunning();
   },
   _focusNext(){
@@ -800,6 +846,7 @@ function startDesktop(){
   buildMenuBar();
   applyBrightness();
   renderDesktopIcons();
+  applyDemoModeState();
   buildDock();
   startClock();
   wireDesktopEvents();
@@ -904,6 +951,59 @@ function genericTopMenu(m,x,y){
   showCtx(x,y,sets[m]||[{label:m,disabled:true}]);
 }
 
+const BENOS_TIPS=[
+  'Press Ctrl+Space to search the desktop instantly.',
+  'Right-click almost anything for quick actions and context menus.',
+  'Pin your favorite apps to the Dock for one-click access.',
+  'Drag files from your real computer onto the desktop to import them.',
+  'Use the menu bar to manage Wi‑Fi, notifications, and controls in one place.',
+  'Maximize windows to take over the screen while keeping the menu bar visible.',
+  'Use the Files app to keep your desktop clean and organized.',
+  'BenOS stores your wallpaper and dock preferences automatically.'
+];
+
+function pickRandomTip(){
+  return BENOS_TIPS[Math.floor(Math.random()*BENOS_TIPS.length)];
+}
+
+function getWeatherSnapshot(){
+  const d=new Date();
+  const hour=d.getHours();
+  const temp=62 + ((d.getDate()*3 + d.getMonth()*2 + hour) % 19);
+  const conditions=[
+    {icon:'☀️',label:'Clear'},
+    {icon:'⛅',label:'Partly Cloudy'},
+    {icon:'🌤️',label:'Bright'},
+    {icon:'🌦️',label:'Light Rain'},
+    {icon:'🌧️',label:'Rainy'},
+    {icon:'❄️',label:'Cool'}
+  ];
+  const cond=conditions[(d.getDay()+Math.floor(hour/3))%conditions.length];
+  return {icon:cond.icon, temp:temp+'°', summary:cond.label};
+}
+
+function closeDatePanel(){
+  const panel=$('#mb-date-panel');
+  if(!panel) return;
+  panel.classList.add('hidden');
+  $('#mb-clock').classList.remove('active');
+}
+
+function toggleDatePanel(){
+  const panel=$('#mb-date-panel');
+  const clock=$('#mb-clock');
+  if(!panel || !clock) return;
+  const isOpen=!panel.classList.contains('hidden');
+  if(isOpen){ closeDatePanel(); return; }
+  const weather=getWeatherSnapshot();
+  $('#mb-weather-icon').textContent=weather.icon;
+  $('#mb-weather-temp').textContent=weather.temp;
+  $('#mb-weather-summary').textContent=weather.summary;
+  $('#mb-tip-text').textContent=pickRandomTip();
+  panel.classList.remove('hidden');
+  clock.classList.add('active');
+}
+
 /* ---- clock & date ---- */
 function startClock(){
   const upd=()=>{
@@ -979,7 +1079,13 @@ function sortDesktopIcons(){
 /* ===================================================================== */
 function buildDock(){
   const dock=$('#dock'); dock.innerHTML='';
-  const ids=FS.getMeta('dock',[]);
+  let ids=FS.getMeta('dock',[]);
+  if(!ids.includes('app-calculator')) ids.push('app-calculator');
+  ids=ids.filter(id=>{
+    const n=FS.get(id); if(!n) return false;
+    if(!BENOS.demoMode) return true;
+    return isDemoAllowedApp(n.systemApp);
+  });
   const size=FS.getMeta('dockSize',52);
   ids.forEach(id=>{
     const n=FS.get(id); if(!n)return;
@@ -1350,7 +1456,13 @@ function refreshAfterFS(pid){
 /* ===================================================================== */
 function openNode(n){
   if(!n)return;
-  if(n.systemApp){ launchSystemApp(n.systemApp, null, n.id); return; }
+  if(n.systemApp){
+    if(BENOS.demoMode && !isDemoAllowedApp(n.systemApp)){
+      showDialog({icon:'🔒',title:'Demo Mode',body:'This account is in Demo Mode. Only Files, BenBrowser, and Settings are available.',buttons:[{label:'Close',primary:true}]});
+      return;
+    }
+    launchSystemApp(n.systemApp, null, n.id); return;
+  }
   if(n.type==='folder'){ launchSystemApp('files', n.id); return; }
   if(n.type==='app'||n.kind==='app'||extOf(n.name)==='html'||extOf(n.name)==='htm'){ launchHTMLApp(n); return; }
   if(n.kind==='image'){ openImageViewer(n); return; }
@@ -1364,6 +1476,10 @@ function openNode(n){
 /* launch a built-in system application (native, privileged FS access) */
 function launchSystemApp(key, arg, fileId, extra){
   const meta=SYSTEM_APPS[key]; if(!meta)return;
+  if(BENOS.demoMode && !isDemoAllowedApp(key)){
+    showDialog({icon:'🔒',title:'Demo Mode',body:'This account is in Demo Mode. Only Files, BenBrowser, and Settings are available. Turn off Demo Mode in Settings → Users to unlock the full desktop.',buttons:[{label:'Close',primary:true}]});
+    return null;
+  }
   fileId = fileId || ('app-'+key);
   // settings/single-instance behavior: focus existing if present
   const existing = WM.byApp(key)[0];
@@ -1487,6 +1603,13 @@ function wireDesktopEvents(){
   $('#nc-clear').onclick=()=>{ NOTES.length=0; renderNotifCenter(); };
   $('#mb-wifi').onclick=openWifiPanel;
   $('#mb-control').onclick=openControlCenter;
+  $('#mb-clock').onclick=toggleDatePanel;
+
+  document.addEventListener('click',e=>{
+    const panel=$('#mb-date-panel');
+    const clock=$('#mb-clock');
+    if(panel && !panel.contains(e.target) && !clock.contains(e.target)) closeDatePanel();
+  });
 
   // spotlight input
   $('#spot-input').addEventListener('input',e=>spotSearch(e.target.value));
@@ -1521,16 +1644,14 @@ function wireDesktopEvents(){
     const anyMax=[...WM.windows.values()].some(w=>w.maximized);
     if(!anyMax)return;
     if(edgeTimer)clearTimeout(edgeTimer);
-    if(e.clientY<3){
-      $('#menubar').classList.remove('mbar-hide');
-    }else if(e.clientY>window.innerHeight-8){
+    $('#menubar').classList.remove('mbar-hide');
+    if(e.clientY>window.innerHeight-8){
       $('#dock-wrap').classList.remove('dock-hide');
     }
     edgeTimer=setTimeout(()=>{
       const anyMax2=[...WM.windows.values()].some(w=>w.maximized);
       if(!anyMax2)return;
       if(e.clientY>=3&&e.clientY<=window.innerHeight-8){
-        $('#menubar').classList.add('mbar-hide');
         $('#dock-wrap').classList.add('dock-hide');
       }
     },1500);
@@ -1778,7 +1899,7 @@ function buildSettingsApp(win){
         '<div style="display:flex;justify-content:center"><div style="width:260px;aspect-ratio:'+sw+' / '+sh+';max-height:200px;border:6px solid #2a2a2e;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.25);overflow:hidden;background:#000"><div id="wppreview" style="width:100%;height:100%;background:#cfd6e0;background-size:cover;background-position:center"></div></div></div>'); })();
     // fill thumbnails + preview from the cached binaries
     for(const f of bgs){ const ref=assetKey(f.dir||'backgrounds',f.name); const d=await assetData(ref); if(d){ const t=body.querySelector('.wp[data-ref="'+ref+'"]'); if(t)t.style.backgroundImage=wallpaperCssValue(d); } }
-    resolveWallpaper(effective).then(u=>{ const p=$('#wppreview',body); if(p)p.style.backgroundImage=wallpaperCssValue(u); });
+    resolveWallpaper(effective).then(u=>{ const p=$('#wppreview',body); if(p){ p.style.backgroundImage=wallpaperCssValue(u); const vs=(typeof u==='string'?u.trim():''); const isSvg = vs.startsWith('<svg') || vs.startsWith('<?xml') || vs.startsWith('data:image/svg+xml') || /\.svg(\?|$)/i.test(vs); if(isSvg){ p.style.backgroundSize='160% 160%'; p.style.backgroundPosition='center center'; p.style.backgroundRepeat='no-repeat'; }else{ p.style.backgroundSize='cover'; p.style.backgroundPosition='center'; p.style.backgroundRepeat='no-repeat'; } } });
     $$('.wp',body).forEach(w=>w.onclick=win.guard(async()=>{await setWall(w.dataset.ref);}));
     $('#wpset',body).onclick=win.guard(async()=>{const u=$('#wpurl',body).value.trim();if(u)await setWall(u);});
     $('#wpreset',body).onclick=win.guard(async()=>{await setWall(null);});
@@ -1803,12 +1924,14 @@ function buildSettingsApp(win){
           (u.pass?'<button class="tbtn" data-clr="'+i+'">Remove Password</button>':'')+
           (users.length>1?'<button class="tbtn" data-del="'+i+'">Delete</button>':'')
         ) : '<span style="font-size:11px;color:#999;white-space:nowrap">Locked</span>';
+        const demoToggle = self ? '<div style="display:flex;align-items:center;gap:8px;min-width:88px;justify-content:flex-end"><span style="font-size:11px;color:#666">Demo</span><label class="switch"><input type="checkbox" data-demo="'+i+'" '+(u.demo?'checked':'')+'><span class="slider"></span></label></div>' : '<span style="font-size:11px;color:#999;white-space:nowrap">'+(u.demo?'Demo on':'Demo off')+'</span>';
         return '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #eee">'+
           '<div style="font-size:28px">'+(u.avatar||'👤')+'</div>'+
           '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+(u.name===BENOS.user?' <span style="font-size:11px;color:#888;font-weight:400">(current)</span>':'')+'</div>'+
           '<div style="font-size:11px;color:#999">'+(u.pass?'🔒 Password protected':'No password')+' · '+(u.hint?'💡 Hint set':'No hint')+'</div></div>'+
           (self?'<button class="tbtn" data-name="'+i+'">Rename</button>':'')+
           actions+
+          demoToggle+
         '</div>';
       }).join(''))
       +card('Add User','<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="nu-name" placeholder="User name" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-pass" placeholder="Password (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><input id="nu-hint" placeholder="Password hint (optional)" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px"><button class="tbtn" id="nu-add">Add User</button></div>')
@@ -1818,7 +1941,8 @@ function buildSettingsApp(win){
     $$('[data-hint]',body).forEach(b=>b.onclick=win.guard(()=>{ const i=+b.dataset.hint; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can edit this password hint.',buttons:[{label:'Close',primary:true}]}); return; } promptText('Set Password Hint','Enter a password hint for '+users[i].name+':',users[i].hint||'', false, async v=>{ users[i].hint=v||''; await commit(); notify('Hint saved',users[i].name,'💡'); }); }));
     $$('[data-clr]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.clr; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can remove this password.',buttons:[{label:'Close',primary:true}]}); return; } users[i].pass=''; await commit(); }));
     $$('[data-del]',body).forEach(b=>b.onclick=win.guard(async()=>{ const i=+b.dataset.del; if(users[i].name!==BENOS.user){ showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can delete this account.',buttons:[{label:'Close',primary:true}]}); return; } if(users.length<=1)return; const nm=users[i].name; const wasCurrent=users[i].name===BENOS.user; users.splice(i,1); if(wasCurrent) setActiveUserName(users[0]?users[0].name:'BenOS User 1'); await commit(); notify('User removed',nm,'👤'); }));
-    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const dup=users.some(u=>u.name.toLowerCase()===nm.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤'}); await commit(); notify('User added',nm,'👤'); });
+    $$('[data-demo]',body).forEach(b=>b.onchange=win.guard(async e=>{ const i=+e.target.dataset.demo; if(users[i].name!==BENOS.user){ e.target.checked = !!users[i].demo; showDialog({icon:'🔒',title:'Access denied',body:'Only the signed-in user can change Demo Mode for this account.',buttons:[{label:'Close',primary:true}]}); return; } const desired = !!e.target.checked; if(desired){ users[i].demo = true; await commit(); applyDemoModeState(); notify('Demo Mode enabled', users[i].name+' is now limited to Files, Browser, and Settings.', '🔒'); return; } promptText('Disable Demo Mode','Enter the passcode for '+users[i].name+' to disable Demo Mode:', '', true, async v=>{ const pass=(v||''); if(pass!==String(users[i].pass||'')){ e.target.checked = true; showDialog({icon:'⚠️',title:'Incorrect passcode',body:'The passcode entered for '+users[i].name+' was incorrect. Please check your credentials and try again. If you are not authorized, please stop as this action is not permitted.',buttons:[{label:'Close',primary:true}]}); return; } users[i].demo=false; await commit(); applyDemoModeState(); notify('Demo Mode disabled', users[i].name+' has full access again.', '✅'); }); }));
+    $('#nu-add',body).onclick=win.guard(async()=>{ const nm=$('#nu-name',body).value.trim(); if(!nm){return;} const dup=users.some(u=>u.name.toLowerCase()===nm.toLowerCase()); if(dup){ showDialog({icon:'⚠️',title:'Duplicate Username',body:'That username is already in use. Please choose another one.',buttons:[{label:'Close',primary:true}]}); return; } const pw=$('#nu-pass',body).value||''; const hint=$('#nu-hint',body).value||''; users.push({name:nm,pass:pw,hint:hint,avatar:'👤',demo:false}); await commit(); notify('User added',nm,'👤'); });
   }
   function renderStorage(){
     const s=FS.stats(); const total=512*1048576; const pct=Math.min(100,(s.bytes/total)*100);
