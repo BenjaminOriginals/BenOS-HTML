@@ -1,4 +1,4 @@
-# BenOS-HTML
+# BenOS HTML
 BenOS HTML is a high-performance, browser-based OS for productivity and creation running in any modern browser on a very light installation file (zip downloadable here). Built on HTML and JavaScript, BenOS HTML offers an intuitive file manager, exclusive music on BenMusic, an HTML editor with live preview in the BenStudio app, and amazing customization in Settings. Here is a list of the apps pre-installed on BenOS HTML:
 | App | Function |
 |-----|----------|
@@ -10,7 +10,11 @@ BenOS HTML is a high-performance, browser-based OS for productivity and creation
 | BenViewer | View images and videos natively in BenOS HTML. |
 | BenBrowser | A fast, secure, and private browser built for your workflow, seamlessly integrated into the BenOS ecosystem. |
 
-## Installation & Usage
+## Using BenOS HTML on the web (installation below if you prefer on device)
+To use BenOS HTML on the web, visit [mybenos.benjaminoriginals.com](https://mybenos.benjaminoriginals.com)
+Is is better or worse? No, it is just the same. All of your data is saved, and is kept even when updates are pushed to the web version. As long as you don't mess with your browser's cache/storage settings, it should be fine. If you do plan on tweaking browser cache/storage settings, you may want to back up important data just in case.
+
+## Installation & On-device Usage
 When you install BenOS HTML, make sure to set up your account in the Settings app's Account section. Set up your name, add a password (optional), and add a hint (optional).
 
 #### 1. Download files:
