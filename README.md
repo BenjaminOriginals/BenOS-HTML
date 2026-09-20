@@ -12,7 +12,7 @@ BenOS HTML is a high-performance, browser-based OS for productivity and creation
 
 ## Using BenOS HTML on the web (installation below if you prefer on device)
 To use BenOS HTML on the web, visit [mybenos.benjaminoriginals.com](https://mybenos.benjaminoriginals.com)
-Is is better or worse? No, it is just the same. All of your data is saved, and is kept even when updates are pushed to the web version. As long as you don't mess with your browser's cache/storage settings, it should be fine. If you do plan on tweaking browser cache/storage settings, you may want to back up important data just in case.
+Is is better or worse? No, it is just the same. All of your data is saved and is kept even when updates are pushed to the web version. As long as you don't mess with your browser's cache/storage settings, it should be fine. If you do plan on tweaking browser cache/storage settings, you may want to back up important data just in case.
 
 ## Installation & On-device Usage
 When you install BenOS HTML, make sure to set up your account in the Settings app's Account section. Set up your name, add a password (optional), and add a hint (optional).
@@ -32,17 +32,17 @@ When the HTML file is opened in your browser, open settings and set up your user
 To make BenOS as lightweight as possible, the entire OS lives inside a single HTML/JS configuration. The file system relies heavily on async JavaScript, using Promises to manage IndexedDB transactions. For security, apps launch inside their own sandboxed iframes (using allow-scripts and allow-forms). We also built a custom crash bridge listener, so if one app goes down, it won’t crash the whole OS.
 
 ## Screenshots
-| Lock Screen | Desktop | Desktop w/ Apps |
-| ----------- | ------- | --------------- |
-| <img width="1440" height="812" alt="Screenshot 2026-09-06 at 7 30 59 PM" src="https://github.com/user-attachments/assets/10670011-f36e-46ff-ab86-d0af69676923" /> | <img width="1440" height="812" alt="Screenshot 2026-09-06 at 7 30 36 PM" src="https://github.com/user-attachments/assets/6656ac1c-5ae3-4464-aa80-d7b4bb20e473" /> | <img width="1440" height="812" alt="Screenshot 2026-09-06 at 7 32 45 PM" src="https://github.com/user-attachments/assets/7d6b2851-14ae-4e96-85db-a3dc04bc6803" /> |
+| Lock Screen | Desktop | 
+| ----------- | ------- |
+| <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 34 27 AM" src="https://github.com/user-attachments/assets/36f5769b-20a5-438b-92e7-e1bcc18d34de" /> | <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 34 43 AM" src="https://github.com/user-attachments/assets/fe6ea8d0-725e-4244-96d9-560080c9e33d" /> |
 
 | BenMusic | Files App |
 | -------- | --------- |
-| <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 26 39 PM" src="https://github.com/user-attachments/assets/1a961e34-76d6-479f-be14-848024f4417f" /> | <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 28 46 PM" src="https://github.com/user-attachments/assets/13bb8849-90eb-4683-8804-df98023ee025" /> |
+| <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 34 59 AM" src="https://github.com/user-attachments/assets/1ebceff7-2903-4c65-a750-fad1c7b7bbcc" /> | <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 35 26 AM" src="https://github.com/user-attachments/assets/c4642ad3-1133-434f-9343-dca25d4924a9" /> |
 
 | BenViewer | BenStudio |
 | --------- | --------- |
-| <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 31 34 PM" src="https://github.com/user-attachments/assets/6f30382d-e48e-45ea-9aa2-c69189f937b7" /> | <img width="1440" height="812" alt="Screenshot 2026-09-07 at 12 35 38 PM" src="https://github.com/user-attachments/assets/f2dc7010-bfbc-47f6-b0b5-8e9668b1aa4d" /> |
+| <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 43 03 AM" src="https://github.com/user-attachments/assets/2246d7f1-a0a7-4983-a54c-be550706c0c5" /> | <img width="1440" height="812" alt="Screenshot 2026-09-20 at 10 43 22 AM" src="https://github.com/user-attachments/assets/c8a277e7-5616-4bfc-bf9d-e5d6f4fa266a" /> |
 
 ## For Businesses
 In BenOS HTML, you can enable Demo Mode to show off devices with an ultra-high-performance, lightweight OS. You can present it on any device, to anyone! The best part is, BenOS HTML has BenOS Connect fused into the software, so no matter what users try to do, they cannot mess with your own BenOS HTML stuff, only the stuff that needs to be shown off. All you have to do is create an account to host the demo and follow these steps:
