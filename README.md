@@ -1,4 +1,4 @@
-# ![logo](https://lh3.googleusercontent.com/pw/AP1GczOAmg904sOHG3i5Y9jW8Q9ZX856tuUtnaayBxIvaM-hYd5NLaqUc_yy84NyF7wHtS9ZRRFjxYQKzW-atFrEwqw1Mn_lHq7CQeOYGEoEFrDJZCn8p1U5KFCPXSgJ5D9IPeB4359AbRkUUpxDOp24J0NQ=w500-h500-c)
+# ![logo](https://lh3.googleusercontent.com/pw/AP1GczOAmg904sOHG3i5Y9jW8Q9ZX856tuUtnaayBxIvaM-hYd5NLaqUc_yy84NyF7wHtS9ZRRFjxYQKzW-atFrEwqw1Mn_lHq7CQeOYGEoEFrDJZCn8p1U5KFCPXSgJ5D9IPeB4359AbRkUUpxDOp24J0NQ=w500-h300-c)
 BenOS HTML is a high-performance, browser-based OS for productivity and creation running in any modern browser on a very light installation file (zip downloadable here). Built on HTML and JavaScript, BenOS HTML offers an intuitive file manager, exclusive music on BenMusic, an HTML editor with live preview in the BenStudio app, and amazing customization in Settings. Here is a list of the apps pre-installed on BenOS HTML:
 | App | Function |
 |-----|----------|
